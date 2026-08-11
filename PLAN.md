@@ -513,7 +513,14 @@ On a typical desktop viewport:
 
 # Milestone 11 — Search and filtering
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-11. Search is now a global responsive command-palette
+interface available from every route through a visible control or Cmd/Ctrl-K.
+It fuzzy-ranks one flat list of active tasks across task and category names,
+opens results in the existing editor, and reuses the optimistic completion,
+exact-ID Undo, error, and reconciliation workflows. Per-view filters were
+intentionally left out.
 
 ## Goal
 

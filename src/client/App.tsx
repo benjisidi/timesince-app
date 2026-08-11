@@ -6,6 +6,7 @@ import {
   type FormEvent,
   type MouseEvent,
 } from "react";
+import { fuzzy } from "fast-fuzzy";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router";
 
 import type { CategoryResponse, TaskResponse } from "../shared/api";
@@ -15,6 +16,7 @@ import {
   createCategory,
   createTask,
   deleteCategory,
+  fetchAllActiveTasks,
   fetchCategories,
   fetchCategoryView,
   fetchEditorDependencies,
@@ -60,6 +62,27 @@ const UNDO_LIFETIME_MS = 5_000;
 const COLLAPSED_CATEGORIES_KEY = "timesince.collapsed-categories.v1";
 const CATEGORY_GRID_ROW_PX = 8;
 const CATEGORY_GRID_GAP_PX = 24;
+const SEARCH_MATCH_THRESHOLD = 0.6;
+
+function rankSearchResults(tasks: TaskResponse[], query: string) {
+  const term = query.trim();
+  if (!term) return [];
+
+  return tasks
+    .map((task) => {
+      const nameScore = fuzzy(term, task.name);
+      const categoryScore = fuzzy(term, task.category?.name ?? "Uncategorized");
+      return {
+        task,
+        score: nameScore * 2 + categoryScore,
+        isRelevant:
+          Math.max(nameScore, categoryScore) >= SEARCH_MATCH_THRESHOLD,
+      };
+    })
+    .filter(({ isRelevant }) => isRelevant)
+    .sort((first, second) => second.score - first.score)
+    .map(({ task }) => task);
+}
 
 function compareByNameAndId(first: TaskResponse, second: TaskResponse) {
   return first.name.localeCompare(second.name) || first.id - second.id;
@@ -801,6 +824,167 @@ function UndoToast({ item, onExpire, onUndo }: UndoToastProps) {
   );
 }
 
+interface UndoStackProps {
+  items: UndoItem[];
+  onExpire: (itemId: number) => void;
+  onUndo: (item: UndoItem) => void;
+}
+
+function UndoStack({ items, onExpire, onUndo }: UndoStackProps) {
+  if (items.length === 0) return null;
+
+  return (
+    <aside className="undo-stack" aria-label="Completion actions">
+      {items.map((item) => (
+        <UndoToast
+          key={item.id}
+          item={item}
+          onExpire={onExpire}
+          onUndo={onUndo}
+        />
+      ))}
+    </aside>
+  );
+}
+
+interface TaskSearchDialogProps {
+  loadState: DependencyState;
+  tasks: TaskResponse[];
+  query: string;
+  completionError: string | null;
+  completingTaskIds: ReadonlySet<number>;
+  completionDisabledTaskIds: ReadonlySet<number>;
+  undoItems: UndoItem[];
+  onQueryChange: (query: string) => void;
+  onRetry: () => void;
+  onClose: () => void;
+  onComplete: (task: TaskResponse, shouldFocusUndo: boolean) => void;
+  onSelect: (task: TaskResponse) => void;
+  onExpireUndo: (itemId: number) => void;
+  onUndo: (item: UndoItem) => void;
+}
+
+function TaskSearchDialog({
+  loadState,
+  tasks,
+  query,
+  completionError,
+  completingTaskIds,
+  completionDisabledTaskIds,
+  undoItems,
+  onQueryChange,
+  onRetry,
+  onClose,
+  onComplete,
+  onSelect,
+  onExpireUndo,
+  onUndo,
+}: TaskSearchDialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const results = rankSearchResults(tasks, query);
+  const hasQuery = Boolean(query.trim());
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (typeof dialog.showModal === "function") dialog.showModal();
+    else dialog.setAttribute("open", "");
+    inputRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const handleBackdropClick = (event: globalThis.MouseEvent) => {
+      if (event.target === dialog) onClose();
+    };
+    dialog.addEventListener("click", handleBackdropClick);
+    return () => dialog.removeEventListener("click", handleBackdropClick);
+  }, [onClose]);
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="task-search-dialog"
+      aria-labelledby="task-search-heading"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      <div className="task-search-panel">
+        <div className="task-search-heading">
+          <h2 id="task-search-heading">Search tasks</h2>
+          <button
+            type="button"
+            className="dialog-close"
+            onClick={onClose}
+            aria-label="Close search"
+          >
+            ×
+          </button>
+        </div>
+
+        <label className="task-search-input">
+          <span className="visually-hidden">Search active tasks</span>
+          <input
+            ref={inputRef}
+            type="search"
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            placeholder="Search by task or category"
+            autoComplete="off"
+          />
+        </label>
+
+        {loadState === "idle" || loadState === "loading" ? (
+          <p className="search-status" role="status">
+            Loading tasks…
+          </p>
+        ) : null}
+        {loadState === "error" ? (
+          <div className="search-status error-state" role="alert">
+            <p>Couldn’t load tasks. Check your connection and try again.</p>
+            <button type="button" onClick={onRetry}>
+              Retry
+            </button>
+          </div>
+        ) : null}
+        {loadState === "ready" && tasks.length === 0 ? (
+          <p className="search-status">No active tasks to search.</p>
+        ) : null}
+        {loadState === "ready" && tasks.length > 0 && !hasQuery ? (
+          <p className="search-status">Start typing to search active tasks.</p>
+        ) : null}
+        {loadState === "ready" && hasQuery && results.length === 0 ? (
+          <p className="search-status">No tasks match that search.</p>
+        ) : null}
+        {completionError ? (
+          <p className="completion-error search-completion-error" role="alert">
+            {completionError}
+          </p>
+        ) : null}
+        {loadState === "ready" && hasQuery && results.length > 0 ? (
+          <ul className="task-list search-results" aria-label="Search results">
+            {results.map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                isCompleting={completingTaskIds.has(task.id)}
+                isCompletionDisabled={completionDisabledTaskIds.has(task.id)}
+                onComplete={onComplete}
+                onEdit={onSelect}
+              />
+            ))}
+          </ul>
+        ) : null}
+      </div>
+      <UndoStack items={undoItems} onExpire={onExpireUndo} onUndo={onUndo} />
+    </dialog>
+  );
+}
+
 function NavigationLinks({ onNavigate }: { onNavigate: () => void }) {
   return (
     <>
@@ -839,7 +1023,11 @@ function AddTaskButton({
   );
 }
 
-function AppNavigation() {
+function AppNavigation({
+  onSearch,
+}: {
+  onSearch: (trigger: HTMLButtonElement) => void;
+}) {
   const location = useLocation();
   const menuRef = useRef<HTMLDetailsElement>(null);
   const categoryView = location.pathname === "/categories";
@@ -850,6 +1038,9 @@ function AppNavigation() {
     : categoryView
       ? "Category view"
       : "Task view";
+  const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform)
+    ? "⌘K"
+    : "Ctrl K";
 
   return (
     <header className="app-header">
@@ -858,6 +1049,15 @@ function AppNavigation() {
           <p>TimeSince</p>
           <span>{viewLabel}</span>
         </div>
+        <button
+          type="button"
+          className="search-trigger"
+          onClick={(event) => onSearch(event.currentTarget)}
+          aria-label="Search tasks"
+        >
+          <span>Search</span>
+          <kbd aria-hidden="true">{shortcutLabel}</kbd>
+        </button>
         <nav className="desktop-navigation" aria-label="Primary navigation">
           <NavigationLinks onNavigate={closeMenu} />
         </nav>
@@ -1590,12 +1790,19 @@ export function App() {
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
   const [undoItems, setUndoItems] = useState<UndoItem[]>([]);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchLoadState, setSearchLoadState] =
+    useState<DependencyState>("idle");
+  const [searchLoadAttempt, setSearchLoadAttempt] = useState(0);
+  const [searchTasks, setSearchTasks] = useState<TaskResponse[] | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [editorDependencies, setEditorDependencies] =
     useState<EditorDependencies | null>(null);
   const [dependencyState, setDependencyState] =
     useState<DependencyState>("idle");
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const searchReturnFocusRef = useRef<HTMLElement | null>(null);
   const nextUndoIdRef = useRef(1);
 
   const completionDisabledTaskIds = new Set(completingTaskIds);
@@ -1619,6 +1826,50 @@ export function App() {
     void loadTasks();
     return () => abortController.abort();
   }, [loadAttempt]);
+
+  useEffect(() => {
+    function handleSearchShortcut(event: KeyboardEvent) {
+      if (
+        event.key.toLowerCase() !== "k" ||
+        (!event.metaKey && !event.ctrlKey) ||
+        event.altKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+      if (document.querySelector("dialog[open]")) return;
+      searchReturnFocusRef.current =
+        document.activeElement as HTMLElement | null;
+      setCompletionError(null);
+      setSearchLoadState((current) => (current === "error" ? "idle" : current));
+      setIsSearchOpen(true);
+    }
+
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, []);
+
+  useEffect(() => {
+    if (!isSearchOpen || searchTasks !== null) return;
+
+    const abortController = new AbortController();
+    fetchAllActiveTasks(abortController.signal)
+      .then((tasks) => {
+        setSearchTasks(tasks);
+        setSearchLoadState("ready");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          setSearchLoadState("idle");
+        } else {
+          setSearchLoadState("error");
+        }
+      });
+
+    return () => abortController.abort();
+  }, [isSearchOpen, searchLoadAttempt, searchTasks]);
 
   useEffect(() => {
     if (!isCategoryView) return;
@@ -1676,8 +1927,11 @@ export function App() {
     }
   }
 
-  function openEditor(nextEditor: EditorState) {
-    returnFocusRef.current = document.activeElement as HTMLElement | null;
+  function openEditor(
+    nextEditor: EditorState,
+    returnFocus = document.activeElement as HTMLElement | null,
+  ) {
+    returnFocusRef.current = returnFocus;
     setEditor(nextEditor);
     if (!editorDependencies && dependencyState !== "loading")
       void loadDependencies();
@@ -1686,6 +1940,30 @@ export function App() {
   function closeEditor() {
     setEditor(null);
     window.setTimeout(() => returnFocusRef.current?.focus(), 0);
+  }
+
+  function openSearch(trigger: HTMLElement | null) {
+    if (document.querySelector("dialog[open]")) return;
+    searchReturnFocusRef.current = trigger;
+    setCompletionError(null);
+    setSearchLoadState((current) => (current === "error" ? "idle" : current));
+    setIsSearchOpen(true);
+  }
+
+  function closeSearch() {
+    const returnFocus = searchReturnFocusRef.current;
+    setIsSearchOpen(false);
+    setSearchQuery("");
+    setCompletionError(null);
+    window.setTimeout(() => returnFocus?.focus(), 0);
+  }
+
+  function selectSearchResult(task: TaskResponse) {
+    const returnFocus = searchReturnFocusRef.current;
+    setIsSearchOpen(false);
+    setSearchQuery("");
+    setCompletionError(null);
+    openEditor({ mode: "edit", task }, returnFocus);
   }
 
   function reconcileTask(task: TaskResponse) {
@@ -1709,6 +1987,11 @@ export function App() {
         return task.archivedAt === null ? [...remaining, task] : remaining;
       });
     }
+    setSearchTasks((current) => {
+      if (current === null) return current;
+      const remaining = current.filter((item) => item.id !== task.id);
+      return task.archivedAt === null ? [...remaining, task] : remaining;
+    });
   }
 
   function storeCategories(categories: CategoryResponse[]) {
@@ -1731,15 +2014,15 @@ export function App() {
     setReadyTasks(update);
     setUpcomingTasks(update);
     setCategoryTasks(update);
+    setSearchTasks((current) => (current === null ? current : update(current)));
   }
 
   function focusCompletionControl(taskId: number) {
     window.setTimeout(() => {
-      document
-        .querySelector<HTMLButtonElement>(
-          `[data-completion-task-id="${taskId}"]`,
-        )
-        ?.focus();
+      const controls = document.querySelectorAll<HTMLButtonElement>(
+        `[data-completion-task-id="${taskId}"]`,
+      );
+      controls.item(controls.length - 1)?.focus();
     }, 0);
   }
 
@@ -1818,7 +2101,7 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <AppNavigation />
+      <AppNavigation onSearch={openSearch} />
       <div className="app-content">
         <Routes>
           <Route
@@ -1981,17 +2264,12 @@ export function App() {
         {announcement}
       </p>
 
-      {undoItems.length > 0 ? (
-        <aside className="undo-stack" aria-label="Completion actions">
-          {undoItems.map((item) => (
-            <UndoToast
-              key={item.id}
-              item={item}
-              onExpire={expireUndo}
-              onUndo={(selectedItem) => void handleUndo(selectedItem)}
-            />
-          ))}
-        </aside>
+      {!isSearchOpen ? (
+        <UndoStack
+          items={undoItems}
+          onExpire={expireUndo}
+          onUndo={(selectedItem) => void handleUndo(selectedItem)}
+        />
       ) : null}
 
       {!isManageCategories ? (
@@ -1999,6 +2277,31 @@ export function App() {
           accessibleName="Add task"
           className="add-task-button"
           onClick={() => openEditor({ mode: "create" })}
+        />
+      ) : null}
+
+      {isSearchOpen ? (
+        <TaskSearchDialog
+          loadState={searchLoadState}
+          tasks={searchTasks ?? []}
+          query={searchQuery}
+          completionError={completionError}
+          completingTaskIds={completingTaskIds}
+          completionDisabledTaskIds={completionDisabledTaskIds}
+          undoItems={undoItems}
+          onQueryChange={setSearchQuery}
+          onRetry={() => {
+            setSearchTasks(null);
+            setSearchLoadState("idle");
+            setSearchLoadAttempt((attempt) => attempt + 1);
+          }}
+          onClose={closeSearch}
+          onComplete={(task, shouldFocusUndo) =>
+            void handleComplete(task, shouldFocusUndo)
+          }
+          onSelect={selectSearchResult}
+          onExpireUndo={expireUndo}
+          onUndo={(item) => void handleUndo(item)}
         />
       ) : null}
 
@@ -2026,6 +2329,10 @@ export function App() {
             );
             setCategoryTasks((current) =>
               current.filter((item) => item.id !== task.id),
+            );
+            setSearchTasks(
+              (current) =>
+                current?.filter((item) => item.id !== task.id) ?? null,
             );
             setAnnouncement(`Archived ${task.name}.`);
             closeEditor();

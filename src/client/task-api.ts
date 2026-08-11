@@ -59,6 +59,10 @@ export async function fetchTaskView(signal: AbortSignal) {
   return { ready, upcoming };
 }
 
+export async function fetchAllActiveTasks(signal: AbortSignal) {
+  return fetchTaskList("/api/tasks?state=all", signal);
+}
+
 export async function fetchCategoryView(signal: AbortSignal) {
   const requestInit = { signal };
   const [taskResponse, categoryResponse, configResponse] = await Promise.all([
