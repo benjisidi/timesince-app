@@ -214,12 +214,24 @@ For v1, target intervals are whole days.
 
 All elapsed/Ready calculations must be implemented in a shared domain helper and covered by unit tests.
 
+Elapsed days are calendar days, not rolling 24-hour periods. Calculate them as
+the number of local calendar-date boundaries between the latest completion and
+the current time in an explicitly supplied IANA timezone. The domain helper
+must require that timezone as input rather than infer the server's local
+timezone. A local day counts as one day across both 23-hour and 25-hour DST
+transitions.
+
+If a completion timestamp is in the future, defensively clamp its elapsed-day
+result to zero. Validation of deliberately future completion input belongs at
+the API boundary. Calendar-month/year recurrence and longer human-friendly
+duration units remain outside the v1 whole-day interval model.
+
 Conceptually:
 
 ```ts
 lastCompletedAt = latest completion, or null
-elapsedDays = whole days elapsed since lastCompletedAt
-overageDays = max(0, elapsedDays - targetIntervalDays)
+elapsedDays = local calendar days since lastCompletedAt, or null
+overageDays = max(0, elapsedDays - targetIntervalDays), or null
 
 ready =
   lastCompletedAt === null ||
@@ -254,6 +266,7 @@ This superscript notation is a presentation choice, not a domain invariant. It m
 A task without completions:
 
 - displays `Never`;
+- has `null` elapsed and overage values;
 - is Ready immediately.
 
 ---

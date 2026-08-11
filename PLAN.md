@@ -139,7 +139,13 @@ No UI work beyond what is necessary for development/testing.
 
 # Milestone 3 — Core task semantics
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-11. Shared pure domain logic now derives latest completion,
+local calendar-day elapsed time in an explicitly supplied IANA timezone,
+Ready/Sleeping state, snooze visibility, never-completed metadata, and
+over-target days. Unit tests cover state thresholds, completion reset, snooze
+expiry, invalid inputs, future timestamps, calendar boundaries, and DST.
 
 ## Goal
 
