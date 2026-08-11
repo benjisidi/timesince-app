@@ -93,15 +93,15 @@ describe("task API", () => {
       targetIntervalDays: 14,
       initialCompletedAt: "2026-07-01T08:00:00.000Z",
     });
-    const sleepingSoon = await api.post("/api/tasks").send({
-      name: "Sleeping soon",
-      targetIntervalDays: 14,
+    const sleepingOldest = await api.post("/api/tasks").send({
+      name: "Sleeping oldest",
+      targetIntervalDays: 30,
       initialCompletedAt: "2026-07-30T08:00:00.000Z",
     });
-    const sleepingLater = await api.post("/api/tasks").send({
-      name: "Sleeping later",
-      targetIntervalDays: 14,
-      initialCompletedAt: "2026-08-10T08:00:00.000Z",
+    const sleepingNewest = await api.post("/api/tasks").send({
+      name: "Sleeping newest",
+      targetIntervalDays: 7,
+      initialCompletedAt: "2026-08-09T08:00:00.000Z",
     });
     await api.patch(`/api/tasks/${snoozed.body.id}`).send({
       snoozedUntil: "2026-08-12T12:00:00.000Z",
@@ -126,8 +126,8 @@ describe("task API", () => {
 
     const sleeping = await api.get("/api/tasks?state=sleeping");
     expect(sleeping.body.tasks.map(({ id }: { id: number }) => id)).toEqual([
-      sleepingSoon.body.id,
-      sleepingLater.body.id,
+      sleepingOldest.body.id,
+      sleepingNewest.body.id,
     ]);
 
     const categorized = await api.get(

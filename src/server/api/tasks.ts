@@ -122,9 +122,9 @@ function compareReady(first: TaskResponse, second: TaskResponse) {
 }
 
 function compareSleeping(first: TaskResponse, second: TaskResponse) {
-  const firstRemaining = first.targetIntervalDays - (first.elapsedDays ?? 0);
-  const secondRemaining = second.targetIntervalDays - (second.elapsedDays ?? 0);
-  return firstRemaining - secondRemaining || compareByNameAndId(first, second);
+  const elapsedDifference =
+    (second.elapsedDays ?? 0) - (first.elapsedDays ?? 0);
+  return elapsedDifference || compareByNameAndId(first, second);
 }
 
 function toCompletionResponse(completion: CompletionRecord) {

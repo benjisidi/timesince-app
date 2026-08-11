@@ -244,7 +244,13 @@ API/integration tests demonstrate that:
 
 # Milestone 5 — Basic mobile Task view
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-11. The mobile-first Task view now loads canonically ordered
+Ready and Upcoming lists from the API, presents calm elapsed and target context,
+handles loading/error/empty states, and supports server-confirmed completion in
+both sections. A focused frontend interaction test covers the Ready-to-Upcoming
+workflow; visual and responsive details remain part of manual QA.
 
 ## Goal
 

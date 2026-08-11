@@ -10,8 +10,8 @@ export interface OpenDatabaseOptions {
   path?: string;
 }
 
-export function defaultDatabasePath() {
-  return resolve(process.cwd(), "data", "timesince.sqlite");
+export function defaultDatabasePath(workingDirectory = process.cwd()) {
+  return resolve(workingDirectory, "data", "timesince.sqlite");
 }
 
 export function openDatabase(

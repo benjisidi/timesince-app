@@ -15,13 +15,15 @@ Use Node.js 22 (`.nvmrc`) and npm.
 
 ```text
 npm ci                  install dependencies from the lockfile
-TIME_ZONE=<IANA zone> npm run dev
-                        start the frontend and backend in development
+npm run dev             start the frontend and backend; loads optional .env
 npm run db:migrate      apply database migrations explicitly
+npm run db:reset:dev    reset the guarded local development database
+npm run db:seed:dev     seed an empty migrated development database
+npm run db:fixtures:dev reset, migrate, and seed development fixtures
 npm run check           run typecheck, lint, format check, tests, and build
 npm run build           create the production frontend and server bundles
-TIME_ZONE=<IANA zone> NODE_ENV=production npm start
-                        run the production build
+NODE_ENV=production npm start
+                        run the production build; loads optional .env
 ```
 
 Application startup does not apply database migrations automatically.

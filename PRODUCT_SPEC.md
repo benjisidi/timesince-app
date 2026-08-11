@@ -189,7 +189,7 @@ This section may be collapsible because it is secondary to the Ready list.
 Suggested ordering:
 
 - Ready: longest time since completion first;
-- Upcoming: closest to reaching its target first;
+- Upcoming: longest time since completion first;
 - never-completed tasks: at the top of Ready.
 
 Each row should show at minimum:

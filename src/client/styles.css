@@ -1,6 +1,6 @@
 :root {
-  color: #24312c;
-  background: #edf2ee;
+  color: #26312d;
+  background: #edf1ed;
   font-family:
     Inter,
     ui-sans-serif,
@@ -30,58 +30,312 @@ textarea {
   font: inherit;
 }
 
-.foundation-page {
-  display: grid;
+button:focus-visible {
+  outline: 3px solid #31745b;
+  outline-offset: 3px;
+}
+
+.app-shell {
   min-height: 100vh;
-  padding: 1.5rem;
-  place-items: center;
 }
 
-.foundation-card {
-  width: min(100%, 32rem);
-  padding: clamp(1.5rem, 8vw, 3rem);
-  border: 1px solid #cad5cd;
-  border-radius: 1.25rem;
-  background: #ffffff;
-  box-shadow: 0 1rem 3rem rgb(36 49 44 / 8%);
+.app-header {
+  border-bottom: 1px solid #cdd6cf;
+  background: rgb(255 255 255 / 88%);
 }
 
-.foundation-card h1 {
+.app-header > div,
+.task-page {
+  width: min(100%, 44rem);
+  margin-inline: auto;
+}
+
+.app-header > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  min-height: 4.25rem;
+  padding: 0.875rem 1rem;
+}
+
+.app-header p {
   margin: 0;
   color: #17201c;
-  font-size: clamp(2.5rem, 12vw, 4.5rem);
-  letter-spacing: -0.06em;
+  font-size: 1.35rem;
+  font-weight: 750;
+  letter-spacing: -0.04em;
 }
 
-.eyebrow {
-  margin: 0 0 0.5rem;
-  color: #557064;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+.app-header span {
+  color: #64746c;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
-.connection-status {
+.task-page {
+  padding: 1.5rem 1rem 3rem;
+}
+
+.page-intro {
+  margin-bottom: 1.5rem;
+}
+
+.page-intro h1 {
+  margin: 0;
+  color: #17201c;
+  font-size: clamp(2rem, 10vw, 2.75rem);
+  letter-spacing: -0.055em;
+  line-height: 1;
+}
+
+.eyebrow {
+  margin: 0 0 0.45rem;
+  color: #5d7167;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.105em;
+  text-transform: uppercase;
+}
+
+.task-section {
+  overflow: hidden;
+  margin-top: 1rem;
+  border: 1px solid #cbd5cd;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 0.5rem 1.5rem rgb(36 49 44 / 5%);
+}
+
+.task-section h2 {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
-  margin: 2rem 0 0;
-  color: #41534b;
-  font-size: 0.875rem;
+  gap: 0.55rem;
+  min-height: 3.25rem;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #dce3dd;
+  color: #24312c;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
 }
 
-.connection-status span {
-  width: 0.625rem;
-  height: 0.625rem;
+.task-section h2 span {
+  display: inline-grid;
+  min-width: 1.55rem;
+  height: 1.55rem;
+  padding-inline: 0.4rem;
+  border-radius: 999px;
+  background: #e7eee9;
+  color: #4d655a;
+  font-size: 0.75rem;
+  place-items: center;
+}
+
+.task-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-row {
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: 4.75rem;
+  padding: 0.5rem 0.75rem 0.5rem 0.625rem;
+}
+
+.task-row + .task-row {
+  border-top: 1px solid #e0e6e1;
+}
+
+.completion-control {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
   border-radius: 50%;
-  background: #87968f;
+  background: transparent;
+  cursor: pointer;
+  place-items: center;
 }
 
-.connection-status span[data-state="connected"] {
-  background: #39795d;
+.completion-control span {
+  width: 1.35rem;
+  height: 1.35rem;
+  border: 2px solid #71837a;
+  border-radius: 0.42rem;
+  background: #fff;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease;
 }
 
-.connection-status span[data-state="unavailable"] {
-  background: #8b6855;
+.completion-control:hover span {
+  border-color: #31745b;
+}
+
+.completion-control:disabled {
+  cursor: wait;
+}
+
+.completion-control:disabled span {
+  border-color: #6b8e7e;
+  background: #d9e9e0;
+  animation: completion-pulse 900ms ease-in-out infinite alternate;
+}
+
+.task-identity,
+.task-timing {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+}
+
+.task-identity {
+  padding: 0.35rem 0.65rem 0.35rem 0.25rem;
+}
+
+.task-name {
+  color: #1d2924;
+  font-size: 0.95rem;
+  font-weight: 680;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.task-category {
+  margin-top: 0.18rem;
+  color: #718078;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.task-timing {
+  align-items: flex-end;
+  padding-left: 0.35rem;
+  text-align: right;
+}
+
+.elapsed-primary {
+  color: #31443b;
+  font-size: 0.88rem;
+  font-weight: 760;
+  white-space: nowrap;
+}
+
+.elapsed-primary sup {
+  position: relative;
+  top: -0.08em;
+  margin-left: 0.08em;
+  color: #678074;
+  font-size: 0.63em;
+}
+
+.task-target {
+  margin-top: 0.15rem;
+  color: #849088;
+  font-size: 0.64rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.section-empty,
+.all-tasks-empty,
+.page-status,
+.completion-error {
+  color: #5e6e66;
+  line-height: 1.5;
+}
+
+.section-empty {
+  margin: 0;
+  padding: 1.15rem 1rem 1.25rem;
+}
+
+.all-tasks-empty,
+.page-status,
+.completion-error {
+  padding: 1rem;
+  border: 1px solid #ced8d0;
+  border-radius: 0.85rem;
+  background: rgb(255 255 255 / 68%);
+}
+
+.all-tasks-empty,
+.completion-error {
+  margin: 0 0 1rem;
+}
+
+.page-status {
+  margin: 0;
+}
+
+.completion-error,
+.error-state {
+  border-color: #d8cdc4;
+  background: #f8f4f0;
+  color: #674f42;
+}
+
+.error-state p {
+  margin: 0 0 0.75rem;
+}
+
+.error-state button {
+  min-height: 2.75rem;
+  padding: 0.55rem 1rem;
+  border: 1px solid #6a7d73;
+  border-radius: 0.65rem;
+  background: #fff;
+  color: #2e4038;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes completion-pulse {
+  to {
+    background: #bcd6c8;
+  }
+}
+
+@media (min-width: 40rem) {
+  .app-header > div,
+  .task-page {
+    padding-inline: 1.5rem;
+  }
+
+  .task-page {
+    padding-top: 2rem;
+  }
+
+  .task-row {
+    padding-right: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .completion-control span {
+    transition: none;
+  }
+
+  .completion-control:disabled span {
+    animation: none;
+  }
 }
