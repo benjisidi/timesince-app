@@ -301,6 +301,12 @@ POST   /api/tasks/:id/restore
 Task creation may include an optional past initial-completion timestamp. It is
 created atomically with the task.
 
+The task create/update endpoints also accept a `YYYY-MM-DD` calendar date for
+`initialCompletedAt` and `snoozedUntil`. The server resolves it to the start of
+that date in the configured application timezone before validation and UTC
+storage. This supports date-only UI controls without depending on the
+browser's timezone. Existing ISO-8601 instant inputs remain supported.
+
 Useful `GET /api/tasks` query parameters may include:
 
 ```text
@@ -368,6 +374,15 @@ DELETE /api/categories/:id
 Category reorder may be handled either through `PATCH` or a small reorder endpoint.
 
 Prefer the simpler implementation until the UI requires otherwise.
+
+The frontend may read the configured application timezone from:
+
+```text
+GET /api/config
+```
+
+This value is presentation/configuration metadata only; clients cannot change
+the deployment timezone through the API.
 
 ---
 

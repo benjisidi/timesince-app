@@ -300,7 +300,14 @@ Manual QA should verify the mobile layout, spacing, touch interactions, and over
 
 # Milestone 6 — Create/edit task flow
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-11. The mobile Task view now supports creating and editing
+tasks through an accessible sheet/dialog, including ordered category
+selection, date-only previous completion and snooze controls interpreted in
+the configured timezone, list reconciliation, and confirmed archival. Focused
+frontend tests cover creation and error-preserving edits; restoration remains
+API-only until a later view makes archived tasks discoverable.
 
 ## Goal
 

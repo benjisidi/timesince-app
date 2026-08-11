@@ -30,7 +30,10 @@ textarea {
   font: inherit;
 }
 
-button:focus-visible {
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+summary:focus-visible {
   outline: 3px solid #31745b;
   outline-offset: 3px;
 }
@@ -75,7 +78,7 @@ button:focus-visible {
 }
 
 .task-page {
-  padding: 1.5rem 1rem 3rem;
+  padding: 1.5rem 1rem 6rem;
 }
 
 .page-intro {
@@ -141,10 +144,29 @@ button:focus-visible {
 
 .task-row {
   display: grid;
-  grid-template-columns: 2.75rem minmax(0, 1fr) auto;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
   align-items: center;
   min-height: 4.75rem;
   padding: 0.5rem 0.75rem 0.5rem 0.625rem;
+}
+
+.task-edit-control {
+  display: grid;
+  min-width: 0;
+  min-height: 3.75rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 0.55rem;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.task-edit-control:hover {
+  background: #f5f8f5;
 }
 
 .task-row + .task-row {
@@ -309,6 +331,260 @@ button:focus-visible {
   border: 0;
 }
 
+.add-task-button {
+  position: fixed;
+  z-index: 2;
+  right: max(1rem, calc((100vw - 44rem) / 2 + 1rem));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  display: grid;
+  width: 3.5rem;
+  height: 3.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 1rem;
+  background: #2e6d54;
+  box-shadow: 0 0.75rem 1.5rem rgb(31 65 52 / 25%);
+  color: #fff;
+  cursor: pointer;
+  font-size: 2rem;
+  font-weight: 400;
+  line-height: 1;
+  place-items: center;
+}
+
+.add-task-button:hover {
+  background: #245b45;
+}
+
+.task-dialog {
+  width: 100%;
+  max-width: none;
+  max-height: min(92dvh, 48rem);
+  margin: auto 0 0;
+  padding: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 1.2rem 1.2rem 0 0;
+  background: transparent;
+  color: #26312d;
+}
+
+.task-dialog::backdrop {
+  background: rgb(18 26 22 / 52%);
+}
+
+.dialog-panel {
+  max-height: min(92dvh, 48rem);
+  padding: 1.25rem 1rem max(1.25rem, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  border-radius: inherit;
+  background: #f8faf8;
+  box-shadow: 0 -1rem 3rem rgb(15 29 22 / 18%);
+}
+
+.dialog-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.dialog-heading h2 {
+  margin: 0;
+  color: #17201c;
+  font-size: 1.6rem;
+  letter-spacing: -0.04em;
+}
+
+.dialog-heading .eyebrow {
+  margin-bottom: 0.3rem;
+}
+
+.dialog-close {
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #e7eee9;
+  color: #40544a;
+  cursor: pointer;
+  font-size: 1.65rem;
+  line-height: 1;
+}
+
+.form-field {
+  display: grid;
+  gap: 0.42rem;
+  margin-top: 1rem;
+  color: #2b3933;
+  font-size: 0.88rem;
+  font-weight: 720;
+}
+
+.form-field > span:first-child {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.form-field span small {
+  color: #718078;
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.form-field input,
+.form-field select {
+  width: 100%;
+  min-height: 3rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #aebdb3;
+  border-radius: 0.7rem;
+  background: #fff;
+  color: #1d2924;
+}
+
+.form-field input[aria-invalid="true"],
+.form-field select[aria-invalid="true"] {
+  border-color: #9a6b58;
+}
+
+.form-field > small,
+.dependency-error small {
+  color: #765545;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.dependency-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.dependency-error button,
+.text-button {
+  padding: 0.25rem 0;
+  border: 0;
+  background: transparent;
+  color: #2f6b53;
+  cursor: pointer;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.advanced-fields {
+  margin-top: 1.15rem;
+  padding: 0.8rem 0.9rem 1rem;
+  border: 1px solid #d5ded7;
+  border-radius: 0.8rem;
+  background: #fff;
+}
+
+.advanced-fields summary {
+  min-height: 1.75rem;
+  cursor: pointer;
+  color: #40544a;
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.advanced-fields .form-field {
+  margin-top: 0.75rem;
+}
+
+.completion-context,
+.timezone-help {
+  color: #68786f;
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.completion-context {
+  margin: 0.5rem 0 0;
+}
+
+.timezone-help {
+  margin: 0.75rem 0 0;
+}
+
+.form-error {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid #d8cdc4;
+  border-radius: 0.7rem;
+  background: #f8f4f0;
+  color: #674f42;
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.form-actions,
+.archive-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.form-actions {
+  margin-top: 1.25rem;
+}
+
+.primary-button,
+.secondary-button,
+.archive-button {
+  min-height: 3rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.7rem;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.primary-button {
+  border: 1px solid #2e6d54;
+  background: #2e6d54;
+  color: #fff;
+}
+
+.secondary-button {
+  border: 1px solid #aebdb3;
+  background: #fff;
+  color: #34483e;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.archive-area {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid #d5ded7;
+}
+
+.archive-area p {
+  margin: 0 0 0.85rem;
+  color: #5d4a41;
+  font-size: 0.83rem;
+  line-height: 1.45;
+}
+
+.archive-trigger,
+.archive-button {
+  color: #754c3b;
+}
+
+.archive-button {
+  border: 1px solid #9b6e5a;
+  background: #fff8f4;
+}
+
 @keyframes completion-pulse {
   to {
     background: #bcd6c8;
@@ -328,6 +604,17 @@ button:focus-visible {
   .task-row {
     padding-right: 1rem;
   }
+
+  .task-dialog {
+    width: min(calc(100% - 2rem), 31rem);
+    margin: auto;
+    border-radius: 1.2rem;
+  }
+
+  .dialog-panel {
+    padding: 1.5rem;
+    box-shadow: 0 1.5rem 4rem rgb(15 29 22 / 24%);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -337,5 +624,9 @@ button:focus-visible {
 
   .completion-control:disabled span {
     animation: none;
+  }
+
+  .task-edit-control {
+    transition: none;
   }
 }

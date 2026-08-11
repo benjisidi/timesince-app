@@ -130,4 +130,122 @@ describe("Task view", () => {
       ),
     ).toBe(true);
   });
+
+  it("creates a categorized task with a previous completion date", async () => {
+    const createdTask = task({
+      id: 3,
+      name: "Clean fridge",
+      category: { id: 2, name: "Kitchen" },
+      targetIntervalDays: 30,
+      lastCompletedAt: "2026-08-05T23:00:00.000Z",
+      elapsedDays: 5,
+      overageDays: 0,
+      state: "sleeping",
+      visibleInReady: false,
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.includes("state=ready")) return jsonResponse({ tasks: [] });
+        if (url.includes("state=sleeping")) return jsonResponse({ tasks: [] });
+        if (url === "/api/categories") {
+          return jsonResponse({
+            categories: [{ id: 2, name: "Kitchen", position: 0 }],
+          });
+        }
+        if (url === "/api/config") {
+          return jsonResponse({ timeZone: "Europe/London" });
+        }
+        if (url === "/api/tasks" && init?.method === "POST") {
+          return jsonResponse(createdTask, 201);
+        }
+        return jsonResponse(
+          { error: { code: "NOT_FOUND", message: "No" } },
+          404,
+        );
+      });
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "Ready 0 tasks" });
+    await userEvent.click(screen.getByRole("button", { name: "Add task" }));
+    await screen.findByRole("option", { name: "Kitchen" });
+
+    await userEvent.type(screen.getByLabelText("Name"), "Clean fridge");
+    await userEvent.type(screen.getByLabelText(/Target interval/), "30");
+    await userEvent.selectOptions(screen.getByLabelText("Category"), "2");
+    await userEvent.click(screen.getByText("Previous completion"));
+    await userEvent.type(screen.getByLabelText(/Last completed/), "2026-08-06");
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }));
+
+    const upcomingSection = screen.getByRole("region", { name: /Upcoming/ });
+    await waitFor(() => {
+      expect(within(upcomingSection).getByText("Clean fridge")).toBeTruthy();
+    });
+    const createCall = fetchMock.mock.calls.find(
+      ([input, init]) =>
+        String(input) === "/api/tasks" && init?.method === "POST",
+    );
+    expect(JSON.parse(String(createCall?.[1]?.body))).toEqual({
+      name: "Clean fridge",
+      categoryId: 2,
+      targetIntervalDays: 30,
+      initialCompletedAt: "2026-08-06",
+    });
+  });
+
+  it("opens editing from a task row and preserves values after an API error", async () => {
+    const readyTask = task({ id: 1, name: "Hoover floor" });
+    const updatedTask = task({ ...readyTask, name: "Vacuum floor" });
+    let patchAttempts = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("state=ready"))
+        return jsonResponse({ tasks: [readyTask] });
+      if (url.includes("state=sleeping")) return jsonResponse({ tasks: [] });
+      if (url === "/api/categories") {
+        return jsonResponse({
+          categories: [{ id: 1, name: "Kitchen", position: 0 }],
+        });
+      }
+      if (url === "/api/config")
+        return jsonResponse({ timeZone: "Europe/London" });
+      if (url === "/api/tasks/1" && init?.method === "PATCH") {
+        patchAttempts += 1;
+        if (patchAttempts === 1) {
+          return jsonResponse(
+            {
+              error: {
+                code: "INVALID_REQUEST",
+                message: "Task save failed",
+                fields: { name: "Try a different name" },
+              },
+            },
+            400,
+          );
+        }
+        return jsonResponse(updatedTask);
+      }
+      return jsonResponse({ error: { code: "NOT_FOUND", message: "No" } }, 404);
+    });
+
+    render(<App />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Edit Hoover floor" }),
+    );
+    await screen.findByRole("option", { name: "Kitchen" });
+    const nameInput = screen.getByLabelText("Name");
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Vacuum floors");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(await screen.findByText("Try a different name")).toBeTruthy();
+    expect((nameInput as HTMLInputElement).value).toBe("Vacuum floors");
+
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Vacuum floor");
+    await userEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    await screen.findByRole("button", { name: "Edit Vacuum floor" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
 });

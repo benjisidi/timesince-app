@@ -238,7 +238,7 @@ export function createTaskRouter(options: CreateTaskRouterOptions) {
 
   router.post("/", async (request, response) => {
     const now = clock();
-    const input = parseCreateTaskBody(request.body, now);
+    const input = parseCreateTaskBody(request.body, now, options.timeZone);
     await ensureCategoryExists(input.categoryId);
 
     const task = await options.database
@@ -280,7 +280,7 @@ export function createTaskRouter(options: CreateTaskRouterOptions) {
     const now = clock();
     const taskId = parseId(request.params.taskId, "taskId");
     await getActiveTask(taskId);
-    const input = parseUpdateTaskBody(request.body, now);
+    const input = parseUpdateTaskBody(request.body, now, options.timeZone);
     if (input.categoryId !== undefined) {
       await ensureCategoryExists(input.categoryId);
     }

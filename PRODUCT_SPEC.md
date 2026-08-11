@@ -164,6 +164,10 @@ A task with no completion history should show `Never` as its elapsed-time value 
 
 When creating a task, the user may optionally provide a previous completion date. This lets an existing real-world routine be entered without falsely marking it complete at creation time.
 
+Previous-completion and snooze controls use local calendar dates in the
+application's configured timezone. A selected date represents the start of
+that calendar day in that timezone.
+
 ---
 
 ## 5. Primary views

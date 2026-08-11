@@ -13,6 +13,32 @@ export interface TaskCategoryResponse {
   name: string;
 }
 
+export interface CategoryResponse extends TaskCategoryResponse {
+  position: number;
+}
+
+export interface CategoryListResponse {
+  categories: CategoryResponse[];
+}
+
+export interface AppConfigResponse {
+  timeZone: string;
+}
+
+export interface CreateTaskRequest {
+  name: string;
+  categoryId: number | null;
+  targetIntervalDays: number;
+  initialCompletedAt: string | null;
+}
+
+export interface UpdateTaskRequest {
+  name: string;
+  categoryId: number | null;
+  targetIntervalDays: number;
+  snoozedUntil: string | null;
+}
+
 export interface TaskResponse {
   id: number;
   name: string;

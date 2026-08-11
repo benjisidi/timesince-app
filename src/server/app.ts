@@ -3,7 +3,9 @@ import { resolve } from "node:path";
 import express from "express";
 import type { Kysely } from "kysely";
 
+import type { AppConfigResponse } from "../shared/api";
 import type { HealthResponse } from "../shared/health";
+import { createCategoryRouter } from "./api/categories";
 import { apiErrorHandler } from "./api/errors";
 import { createCompletionRouter, createTaskRouter } from "./api/tasks";
 import type { TimeSinceDatabase } from "./db/types";
@@ -36,6 +38,11 @@ export function createApp(options: CreateAppOptions) {
     response.json(health);
   });
 
+  app.get("/api/config", (_request, response) => {
+    const config: AppConfigResponse = { timeZone: options.timeZone };
+    response.json(config);
+  });
+
   const apiOptions = {
     database: options.database,
     timeZone: options.timeZone,
@@ -43,6 +50,7 @@ export function createApp(options: CreateAppOptions) {
   };
   app.use("/api/tasks", createTaskRouter(apiOptions));
   app.use("/api/completions", createCompletionRouter(apiOptions));
+  app.use("/api/categories", createCategoryRouter(options.database));
 
   if (options.clientDirectory) {
     const clientDirectory = resolve(options.clientDirectory);

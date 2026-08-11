@@ -42,7 +42,7 @@ describe("task API", () => {
       name: "  Change bedsheets  ",
       categoryId: category.id,
       targetIntervalDays: 14,
-      initialCompletedAt: "2026-08-01T18:20:00.000Z",
+      initialCompletedAt: "2026-08-01",
     });
 
     expect(created.status).toBe(201);
@@ -50,7 +50,7 @@ describe("task API", () => {
       name: "Change bedsheets",
       category: { id: category.id, name: "Bedroom" },
       targetIntervalDays: 14,
-      lastCompletedAt: "2026-08-01T18:20:00.000Z",
+      lastCompletedAt: "2026-07-31T23:00:00.000Z",
       elapsedDays: 10,
       overageDays: 0,
       state: "sleeping",
@@ -69,8 +69,25 @@ describe("task API", () => {
     expect(history.body.completions).toHaveLength(1);
     expect(history.body.completions[0]).toMatchObject({
       taskId: created.body.id,
-      completedAt: "2026-08-01T18:20:00.000Z",
+      completedAt: "2026-07-31T23:00:00.000Z",
     });
+  });
+
+  it("lists ordered task-editor metadata and the configured timezone", async () => {
+    const { api, categories } = await setup();
+    const later = await categories.create({ name: "Garden", position: 2 });
+    const earlier = await categories.create({ name: "Admin", position: 1 });
+
+    const categoryResponse = await api.get("/api/categories");
+    expect(categoryResponse.status).toBe(200);
+    expect(categoryResponse.body.categories).toEqual([
+      { id: earlier.id, name: "Admin", position: 1 },
+      { id: later.id, name: "Garden", position: 2 },
+    ]);
+
+    const configResponse = await api.get("/api/config");
+    expect(configResponse.status).toBe(200);
+    expect(configResponse.body).toEqual({ timeZone: TIME_ZONE });
   });
 
   it("filters semantic state separately from Ready-list visibility and orders each state", async () => {
@@ -166,13 +183,13 @@ describe("task API", () => {
     const edited = await api.patch(`/api/tasks/${created.body.id}`).send({
       name: "Deep-clean oven",
       targetIntervalDays: 45,
-      snoozedUntil: "2026-08-20T12:00:00.000Z",
+      snoozedUntil: "2026-08-20",
     });
     expect(edited.status).toBe(200);
     expect(edited.body).toMatchObject({
       name: "Deep-clean oven",
       targetIntervalDays: 45,
-      snoozedUntil: "2026-08-20T12:00:00.000Z",
+      snoozedUntil: "2026-08-19T23:00:00.000Z",
       lastCompletedAt: "2026-07-01T08:00:00.000Z",
     });
 
@@ -219,7 +236,7 @@ describe("task API", () => {
     expect(restored.body).toMatchObject({
       name: "Deep-clean oven",
       targetIntervalDays: 45,
-      snoozedUntil: "2026-08-20T12:00:00.000Z",
+      snoozedUntil: "2026-08-19T23:00:00.000Z",
       archivedAt: null,
       updatedAt: "2026-08-11T14:00:00.000Z",
       lastCompletedAt: "2026-07-01T08:00:00.000Z",
@@ -304,7 +321,7 @@ describe("task API", () => {
       {
         name: "Task",
         targetIntervalDays: 1,
-        initialCompletedAt: "2026-08-01",
+        initialCompletedAt: "2026-02-30",
       },
     ];
     for (const body of invalidBodies) {

@@ -93,6 +93,75 @@ function parseTimestamp(value: unknown, field: string): Date {
   return timestamp;
 }
 
+function localDateKey(timestamp: Date, timeZone: string): string {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(timestamp);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value;
+
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
+function startOfDateInTimeZone(value: string, field: string, timeZone: string) {
+  const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/;
+  const match = dateOnlyPattern.exec(value);
+  if (!match) {
+    return undefined;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const utcDate = new Date(Date.UTC(year, month - 1, day));
+  if (
+    utcDate.getUTCFullYear() !== year ||
+    utcDate.getUTCMonth() !== month - 1 ||
+    utcDate.getUTCDate() !== day
+  ) {
+    return invalidRequest(`${field} must be a valid calendar date`, {
+      [field]: "Must be a valid calendar date",
+    });
+  }
+
+  const target = value;
+  let low = utcDate.getTime() - 36 * 60 * 60 * 1000;
+  let high = utcDate.getTime() + 36 * 60 * 60 * 1000;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (localDateKey(new Date(middle), timeZone) < target) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+
+  const timestamp = new Date(low);
+  if (localDateKey(timestamp, timeZone) !== target) {
+    return invalidRequest(`${field} does not exist in ${timeZone}`, {
+      [field]: "That calendar date does not exist in the configured timezone",
+    });
+  }
+  return timestamp;
+}
+
+function parseDateOrTimestamp(
+  value: unknown,
+  field: string,
+  timeZone: string,
+): Date {
+  if (typeof value === "string") {
+    const dateOnly = startOfDateInTimeZone(value, field, timeZone);
+    if (dateOnly) {
+      return dateOnly;
+    }
+  }
+  return parseTimestamp(value, field);
+}
+
 function assertNotFuture(value: Date, now: Date, field: string): void {
   if (value.getTime() > now.getTime()) {
     invalidRequest(`${field} must not be in the future`, {
@@ -109,7 +178,11 @@ export function parseId(value: string, field: string): number {
   return parsePositiveInteger(Number(value), field);
 }
 
-export function parseCreateTaskBody(body: unknown, now: Date): CreateTaskBody {
+export function parseCreateTaskBody(
+  body: unknown,
+  now: Date,
+  timeZone: string,
+): CreateTaskBody {
   const value = asObject(body);
   assertAllowedKeys(value, [
     "name",
@@ -127,9 +200,10 @@ export function parseCreateTaskBody(body: unknown, now: Date): CreateTaskBody {
     value.initialCompletedAt !== undefined &&
     value.initialCompletedAt !== null
   ) {
-    initialCompletedAt = parseTimestamp(
+    initialCompletedAt = parseDateOrTimestamp(
       value.initialCompletedAt,
       "initialCompletedAt",
+      timeZone,
     );
     assertNotFuture(initialCompletedAt, now, "initialCompletedAt");
   }
@@ -148,7 +222,11 @@ export function parseCreateTaskBody(body: unknown, now: Date): CreateTaskBody {
   };
 }
 
-export function parseUpdateTaskBody(body: unknown, now: Date): UpdateTaskBody {
+export function parseUpdateTaskBody(
+  body: unknown,
+  now: Date,
+  timeZone: string,
+): UpdateTaskBody {
   const value = asObject(body);
   assertAllowedKeys(value, [
     "name",
@@ -178,7 +256,11 @@ export function parseUpdateTaskBody(body: unknown, now: Date): UpdateTaskBody {
     if (value.snoozedUntil === null) {
       result.snoozedUntil = null;
     } else {
-      const snoozedUntil = parseTimestamp(value.snoozedUntil, "snoozedUntil");
+      const snoozedUntil = parseDateOrTimestamp(
+        value.snoozedUntil,
+        "snoozedUntil",
+        timeZone,
+      );
       if (snoozedUntil.getTime() <= now.getTime()) {
         invalidRequest("snoozedUntil must be in the future", {
           snoozedUntil: "Must be in the future, or null to unsnooze",
