@@ -381,7 +381,14 @@ Handle completion or undo failures safely.
 
 # Milestone 8 — Category view
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-11. The app now provides declarative history-based Task and
+Category routes, ordered expandable category groups with retained collapse
+state, active Ready/Sleeping/snoozed task discovery, Uncategorized handling,
+and the existing optimistic completion, exact Undo, editing, and archival
+flows within Category view. Production SPA fallback and focused frontend
+interactions are covered by automated tests.
 
 ## Goal
 

@@ -5,12 +5,14 @@ import {
   type FormEvent,
   type MouseEvent,
 } from "react";
+import { Navigate, NavLink, Route, Routes, useLocation } from "react-router";
 
 import type { CategoryResponse, TaskResponse } from "../shared/api";
 import {
   archiveTask,
   completeTask,
   createTask,
+  fetchCategoryView,
   fetchEditorDependencies,
   fetchTask,
   fetchTaskView,
@@ -49,6 +51,7 @@ interface UndoItem {
 }
 
 const UNDO_LIFETIME_MS = 5_000;
+const COLLAPSED_CATEGORIES_KEY = "timesince.collapsed-categories.v1";
 
 function compareByNameAndId(first: TaskResponse, second: TaskResponse) {
   return first.name.localeCompare(second.name) || first.id - second.id;
@@ -68,6 +71,17 @@ function compareUpcoming(first: TaskResponse, second: TaskResponse) {
     (second.elapsedDays ?? 0) - (first.elapsedDays ?? 0) ||
     compareByNameAndId(first, second)
   );
+}
+
+function compareCategoryTasks(first: TaskResponse, second: TaskResponse) {
+  const firstBucket = first.isSnoozed ? 2 : first.state === "ready" ? 0 : 1;
+  const secondBucket = second.isSnoozed ? 2 : second.state === "ready" ? 0 : 1;
+  if (firstBucket !== secondBucket) return firstBucket - secondBucket;
+
+  if (first.state !== second.state) return first.state === "ready" ? -1 : 1;
+  return first.state === "ready"
+    ? compareReady(first, second)
+    : compareUpcoming(first, second);
 }
 
 function dateInTimeZone(timestamp: Date, timeZone: string) {
@@ -120,6 +134,8 @@ interface TaskRowProps {
   isCompletionDisabled: boolean;
   onComplete: (task: TaskResponse, shouldFocusUndo: boolean) => void;
   onEdit: (task: TaskResponse) => void;
+  showCategory?: boolean;
+  timeZone?: string;
 }
 
 function TaskRow({
@@ -128,6 +144,8 @@ function TaskRow({
   isCompletionDisabled,
   onComplete,
   onEdit,
+  showCategory = true,
+  timeZone,
 }: TaskRowProps) {
   const targetDayLabel = task.targetIntervalDays === 1 ? "day" : "days";
 
@@ -154,9 +172,19 @@ function TaskRow({
       >
         <span className="task-identity">
           <span className="task-name">{task.name}</span>
-          <span className="task-category">
-            {task.category?.name ?? "Uncategorized"}
-          </span>
+          {showCategory ? (
+            <span className="task-category">
+              {task.category?.name ?? "Uncategorized"}
+            </span>
+          ) : task.isSnoozed && task.snoozedUntil && timeZone ? (
+            <span className="task-snooze">
+              Snoozed until{" "}
+              {new Intl.DateTimeFormat(undefined, {
+                dateStyle: "medium",
+                timeZone,
+              }).format(new Date(task.snoozedUntil))}
+            </span>
+          ) : null}
         </span>
         <span className="task-timing">
           <TaskElapsedTime task={task} />
@@ -733,11 +761,281 @@ function UndoToast({ item, onExpire, onUndo }: UndoToastProps) {
   );
 }
 
+function NavigationLinks({ onNavigate }: { onNavigate: () => void }) {
+  return (
+    <>
+      <NavLink to="/" end onClick={onNavigate}>
+        Task view
+      </NavLink>
+      <NavLink to="/categories" onClick={onNavigate}>
+        Category view
+      </NavLink>
+    </>
+  );
+}
+
+function AppNavigation() {
+  const location = useLocation();
+  const menuRef = useRef<HTMLDetailsElement>(null);
+  const categoryView = location.pathname === "/categories";
+  const closeMenu = () => menuRef.current?.removeAttribute("open");
+
+  return (
+    <header className="app-header">
+      <div>
+        <div className="app-brand">
+          <p>TimeSince</p>
+          <span>{categoryView ? "Category view" : "Task view"}</span>
+        </div>
+        <nav className="desktop-navigation" aria-label="Primary navigation">
+          <NavigationLinks onNavigate={closeMenu} />
+        </nav>
+        <details ref={menuRef} className="mobile-navigation">
+          <summary aria-label="Open navigation menu">
+            <span aria-hidden="true" />
+            <span aria-hidden="true" />
+            <span aria-hidden="true" />
+          </summary>
+          <nav aria-label="Primary navigation">
+            <NavigationLinks onNavigate={closeMenu} />
+          </nav>
+        </details>
+      </div>
+    </header>
+  );
+}
+
+interface CategoryGroup {
+  key: string;
+  name: string;
+  tasks: TaskResponse[];
+}
+
+function readCollapsedCategories() {
+  try {
+    const value = JSON.parse(
+      window.localStorage.getItem(COLLAPSED_CATEGORIES_KEY) ?? "[]",
+    );
+    return new Set(
+      Array.isArray(value)
+        ? value.filter((item): item is string => typeof item === "string")
+        : [],
+    );
+  } catch {
+    return new Set<string>();
+  }
+}
+
+interface CategorySectionProps {
+  group: CategoryGroup;
+  collapsed: boolean;
+  onToggle: (key: string) => void;
+  completingTaskIds: ReadonlySet<number>;
+  completionDisabledTaskIds: ReadonlySet<number>;
+  onComplete: (task: TaskResponse, shouldFocusUndo: boolean) => void;
+  onEdit: (task: TaskResponse) => void;
+  timeZone: string;
+}
+
+function CategorySection({
+  group,
+  collapsed,
+  onToggle,
+  completingTaskIds,
+  completionDisabledTaskIds,
+  onComplete,
+  onEdit,
+  timeZone,
+}: CategorySectionProps) {
+  const headingId = `category-${group.key}-heading`;
+  const listId = `category-${group.key}-tasks`;
+  const countLabel = `${group.tasks.length} ${group.tasks.length === 1 ? "task" : "tasks"}`;
+
+  return (
+    <section
+      className="task-section category-section"
+      aria-labelledby={headingId}
+    >
+      <h2 id={headingId}>
+        <button
+          type="button"
+          aria-expanded={!collapsed}
+          aria-controls={listId}
+          onClick={() => onToggle(group.key)}
+        >
+          <span className="category-heading-name">{group.name}</span>
+          <span className="category-count" aria-label={countLabel}>
+            {group.tasks.length}
+          </span>
+          <span className="category-chevron" aria-hidden="true" />
+        </button>
+      </h2>
+      {!collapsed ? (
+        <ul id={listId} className="task-list">
+          {group.tasks.map((task) => (
+            <TaskRow
+              key={task.id}
+              task={task}
+              isCompleting={completingTaskIds.has(task.id)}
+              isCompletionDisabled={completionDisabledTaskIds.has(task.id)}
+              onComplete={onComplete}
+              onEdit={onEdit}
+              showCategory={false}
+              timeZone={timeZone}
+            />
+          ))}
+        </ul>
+      ) : null}
+    </section>
+  );
+}
+
+interface CategoryViewProps {
+  loadState: DependencyState;
+  tasks: TaskResponse[];
+  categories: CategoryResponse[];
+  timeZone: string | null;
+  completionError: string | null;
+  completingTaskIds: ReadonlySet<number>;
+  completionDisabledTaskIds: ReadonlySet<number>;
+  onRetry: () => void;
+  onComplete: (task: TaskResponse, shouldFocusUndo: boolean) => void;
+  onEdit: (task: TaskResponse) => void;
+}
+
+function CategoryView({
+  loadState,
+  tasks,
+  categories,
+  timeZone,
+  completionError,
+  completingTaskIds,
+  completionDisabledTaskIds,
+  onRetry,
+  onComplete,
+  onEdit,
+}: CategoryViewProps) {
+  const [collapsedCategories, setCollapsedCategories] = useState(
+    readCollapsedCategories,
+  );
+  const tasksByCategory = new Map<number, TaskResponse[]>();
+  const uncategorizedTasks: TaskResponse[] = [];
+  const categoryIds = new Set(categories.map((category) => category.id));
+
+  for (const task of tasks) {
+    const categoryId = task.category?.id;
+    if (categoryId === undefined || !categoryIds.has(categoryId)) {
+      uncategorizedTasks.push(task);
+      continue;
+    }
+    const groupedTasks = tasksByCategory.get(categoryId) ?? [];
+    groupedTasks.push(task);
+    tasksByCategory.set(categoryId, groupedTasks);
+  }
+
+  const groups: CategoryGroup[] = categories.flatMap((category) => {
+    const groupedTasks = tasksByCategory.get(category.id);
+    return groupedTasks && groupedTasks.length > 0
+      ? [
+          {
+            key: String(category.id),
+            name: category.name,
+            tasks: groupedTasks.sort(compareCategoryTasks),
+          },
+        ]
+      : [];
+  });
+  if (uncategorizedTasks.length > 0) {
+    groups.push({
+      key: "uncategorized",
+      name: "Uncategorized",
+      tasks: uncategorizedTasks.sort(compareCategoryTasks),
+    });
+  }
+
+  function toggleCategory(key: string) {
+    setCollapsedCategories((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      try {
+        window.localStorage.setItem(
+          COLLAPSED_CATEGORIES_KEY,
+          JSON.stringify([...next]),
+        );
+      } catch {
+        // The in-memory state still works when storage is unavailable.
+      }
+      return next;
+    });
+  }
+
+  return (
+    <main className="task-page" aria-labelledby="category-view-title">
+      <div className="page-intro">
+        <p className="eyebrow">Tasks grouped by where they belong</p>
+        <h1 id="category-view-title">Categories</h1>
+      </div>
+
+      {loadState === "idle" || loadState === "loading" ? (
+        <p className="page-status" role="status">
+          Loading categories…
+        </p>
+      ) : null}
+      {loadState === "error" ? (
+        <div className="page-status error-state" role="alert">
+          <p>Couldn’t load categories. Check your connection and try again.</p>
+          <button type="button" onClick={onRetry}>
+            Retry
+          </button>
+        </div>
+      ) : null}
+      {loadState === "ready" ? (
+        <>
+          {groups.length === 0 ? (
+            <p className="all-tasks-empty">
+              No active tasks yet. Add one to start a category.
+            </p>
+          ) : null}
+          {completionError ? (
+            <p className="completion-error" role="alert">
+              {completionError}
+            </p>
+          ) : null}
+          {timeZone
+            ? groups.map((group) => (
+                <CategorySection
+                  key={group.key}
+                  group={group}
+                  collapsed={collapsedCategories.has(group.key)}
+                  onToggle={toggleCategory}
+                  completingTaskIds={completingTaskIds}
+                  completionDisabledTaskIds={completionDisabledTaskIds}
+                  onComplete={onComplete}
+                  onEdit={onEdit}
+                  timeZone={timeZone}
+                />
+              ))
+            : null}
+        </>
+      ) : null}
+    </main>
+  );
+}
+
 export function App() {
+  const location = useLocation();
+  const isCategoryView = location.pathname === "/categories";
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [readyTasks, setReadyTasks] = useState<TaskResponse[]>([]);
   const [upcomingTasks, setUpcomingTasks] = useState<TaskResponse[]>([]);
+  const [categoryLoadState, setCategoryLoadState] =
+    useState<DependencyState>("idle");
+  const [categoryLoadAttempt, setCategoryLoadAttempt] = useState(0);
+  const [categoryTasks, setCategoryTasks] = useState<TaskResponse[]>([]);
+  const [categoryList, setCategoryList] = useState<CategoryResponse[]>([]);
+  const [categoryTimeZone, setCategoryTimeZone] = useState<string | null>(null);
   const [completingTaskIds, setCompletingTaskIds] = useState<Set<number>>(
     new Set(),
   );
@@ -773,6 +1071,33 @@ export function App() {
     void loadTasks();
     return () => abortController.abort();
   }, [loadAttempt]);
+
+  useEffect(() => {
+    if (!isCategoryView) return;
+
+    const abortController = new AbortController();
+    async function loadCategories() {
+      setCategoryLoadState("loading");
+      setCompletionError(null);
+      try {
+        const categoryView = await fetchCategoryView(abortController.signal);
+        setCategoryTasks(categoryView.tasks);
+        setCategoryList(categoryView.categories);
+        setCategoryTimeZone(categoryView.timeZone);
+        setEditorDependencies({
+          categories: categoryView.categories,
+          timeZone: categoryView.timeZone,
+        });
+        setDependencyState("ready");
+        setCategoryLoadState("ready");
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError"))
+          setCategoryLoadState("error");
+      }
+    }
+    void loadCategories();
+    return () => abortController.abort();
+  }, [categoryLoadAttempt, isCategoryView]);
 
   async function loadDependencies() {
     setDependencyState("loading");
@@ -811,6 +1136,12 @@ export function App() {
         ? [...remaining, task].sort(compareUpcoming)
         : remaining;
     });
+    if (categoryLoadState === "ready") {
+      setCategoryTasks((current) => {
+        const remaining = current.filter((item) => item.id !== task.id);
+        return task.archivedAt === null ? [...remaining, task] : remaining;
+      });
+    }
   }
 
   function focusCompletionControl(taskId: number) {
@@ -898,72 +1229,99 @@ export function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
-        <div>
-          <p>TimeSince</p>
-          <span>Task view</span>
-        </div>
-      </header>
-      <main className="task-page" aria-labelledby="task-view-title">
-        <div className="page-intro">
-          <p className="eyebrow">Recurring tasks, without deadlines</p>
-          <h1 id="task-view-title">Tasks</h1>
-        </div>
+      <AppNavigation />
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <main className="task-page" aria-labelledby="task-view-title">
+              <div className="page-intro">
+                <p className="eyebrow">Recurring tasks, without deadlines</p>
+                <h1 id="task-view-title">Tasks</h1>
+              </div>
 
-        {loadState === "loading" ? (
-          <p className="page-status" role="status">
-            Loading tasks…
-          </p>
-        ) : null}
-        {loadState === "error" ? (
-          <div className="page-status error-state" role="alert">
-            <p>Couldn’t load tasks. Check your connection and try again.</p>
-            <button type="button" onClick={() => setLoadAttempt((n) => n + 1)}>
-              Retry
-            </button>
-          </div>
-        ) : null}
-        {loadState === "ready" ? (
-          <>
-            {hasNoTasks ? (
-              <p className="all-tasks-empty">
-                No tasks yet. Add one to start tracking time since it was last
-                done.
-              </p>
-            ) : null}
-            {completionError ? (
-              <p className="completion-error" role="alert">
-                {completionError}
-              </p>
-            ) : null}
-            <TaskSection
-              title="Ready"
-              tasks={readyTasks}
-              emptyMessage="Nothing is ready."
+              {loadState === "loading" ? (
+                <p className="page-status" role="status">
+                  Loading tasks…
+                </p>
+              ) : null}
+              {loadState === "error" ? (
+                <div className="page-status error-state" role="alert">
+                  <p>
+                    Couldn’t load tasks. Check your connection and try again.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setLoadAttempt((n) => n + 1)}
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : null}
+              {loadState === "ready" ? (
+                <>
+                  {hasNoTasks ? (
+                    <p className="all-tasks-empty">
+                      No tasks yet. Add one to start tracking time since it was
+                      last done.
+                    </p>
+                  ) : null}
+                  {completionError ? (
+                    <p className="completion-error" role="alert">
+                      {completionError}
+                    </p>
+                  ) : null}
+                  <TaskSection
+                    title="Ready"
+                    tasks={readyTasks}
+                    emptyMessage="Nothing is ready."
+                    completingTaskIds={completingTaskIds}
+                    completionDisabledTaskIds={completionDisabledTaskIds}
+                    onComplete={(task, shouldFocusUndo) =>
+                      void handleComplete(task, shouldFocusUndo)
+                    }
+                    onEdit={(task) => openEditor({ mode: "edit", task })}
+                  />
+                  <TaskSection
+                    title="Upcoming"
+                    tasks={upcomingTasks}
+                    emptyMessage="No upcoming tasks."
+                    completingTaskIds={completingTaskIds}
+                    completionDisabledTaskIds={completionDisabledTaskIds}
+                    onComplete={(task, shouldFocusUndo) =>
+                      void handleComplete(task, shouldFocusUndo)
+                    }
+                    onEdit={(task) => openEditor({ mode: "edit", task })}
+                  />
+                </>
+              ) : null}
+            </main>
+          }
+        />
+        <Route
+          path="/categories"
+          element={
+            <CategoryView
+              loadState={categoryLoadState}
+              tasks={categoryTasks}
+              categories={categoryList}
+              timeZone={categoryTimeZone}
+              completionError={completionError}
               completingTaskIds={completingTaskIds}
               completionDisabledTaskIds={completionDisabledTaskIds}
+              onRetry={() => setCategoryLoadAttempt((attempt) => attempt + 1)}
               onComplete={(task, shouldFocusUndo) =>
                 void handleComplete(task, shouldFocusUndo)
               }
               onEdit={(task) => openEditor({ mode: "edit", task })}
             />
-            <TaskSection
-              title="Upcoming"
-              tasks={upcomingTasks}
-              emptyMessage="No upcoming tasks."
-              completingTaskIds={completingTaskIds}
-              completionDisabledTaskIds={completionDisabledTaskIds}
-              onComplete={(task, shouldFocusUndo) =>
-                void handleComplete(task, shouldFocusUndo)
-              }
-              onEdit={(task) => openEditor({ mode: "edit", task })}
-            />
-          </>
-        ) : null}
-        <p className="visually-hidden" role="status" aria-live="polite">
-          {announcement}
-        </p>
-      </main>
+          }
+        />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <p className="visually-hidden" role="status" aria-live="polite">
+        {announcement}
+      </p>
 
       {undoItems.length > 0 ? (
         <aside className="undo-stack" aria-label="Completion actions">
@@ -1007,6 +1365,9 @@ export function App() {
               current.filter((item) => item.id !== task.id),
             );
             setUpcomingTasks((current) =>
+              current.filter((item) => item.id !== task.id),
+            );
+            setCategoryTasks((current) =>
               current.filter((item) => item.id !== task.id),
             );
             setAnnouncement(`Archived ${task.name}.`);

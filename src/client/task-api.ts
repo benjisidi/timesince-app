@@ -55,6 +55,22 @@ export async function fetchTaskView(signal: AbortSignal) {
   return { ready, upcoming };
 }
 
+export async function fetchCategoryView(signal: AbortSignal) {
+  const requestInit = { signal };
+  const [taskResponse, categoryResponse, configResponse] = await Promise.all([
+    fetch("/api/tasks?state=all", requestInit),
+    fetch("/api/categories", requestInit),
+    fetch("/api/config", requestInit),
+  ]);
+  const [{ tasks }, { categories }, config] = await Promise.all([
+    readJson<TaskListResponse>(taskResponse),
+    readJson<CategoryListResponse>(categoryResponse),
+    readJson<AppConfigResponse>(configResponse),
+  ]);
+
+  return { tasks, categories, timeZone: config.timeZone };
+}
+
 export async function completeTask(
   taskId: number,
 ): Promise<CompletionMutationResponse> {
