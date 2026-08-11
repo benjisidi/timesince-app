@@ -1,0 +1,11 @@
+coverage/
+data/
+dist/
+node_modules/
+package-lock.json
+
+# Authoritative project documents are maintained manually.
+AGENTS.md
+PLAN.md
+PRODUCT_SPEC.md
+TECH_SPEC.md

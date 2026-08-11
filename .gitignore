@@ -1,0 +1,28 @@
+*.png
+
+# Dependencies
+node_modules/
+
+# Build and tool output
+dist/
+coverage/
+*.tsbuildinfo
+
+# Local configuration
+.env
+.env.*
+!.env.example
+
+# Local SQLite data
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+
+# Editor and operating system files
+.DS_Store
+.idea/
+.vscode/
