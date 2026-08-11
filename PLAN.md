@@ -194,7 +194,13 @@ No "overdue", "late", or equivalent domain state should exist.
 
 # Milestone 4 — Core task API
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-11. The backend now exposes validated task and completion
+routes with shared derived state, semantic and visibility filters, explicit
+timezone configuration, exact-ID completion undo, snooze handling, archival,
+and read-only archived-task restoration. API integration tests cover the core
+state-changing workflows and error cases.
 
 ## Goal
 
@@ -209,6 +215,7 @@ Implement the agreed API for:
 - creating a task;
 - editing a task;
 - archiving a task;
+- restoring an archived task;
 - recording a completion;
 - retrieving completion history;
 - undoing/removing a completion;
@@ -229,6 +236,8 @@ API/integration tests demonstrate that:
 - snooze suppresses Ready visibility without changing elapsed time;
 - invalid target intervals are rejected;
 - archived tasks are excluded by default;
+- archived tasks are read-only until restored, while their history remains readable;
+- restoring preserves task fields and completion history;
 - no API response introduces due/overdue semantics.
 
 ---

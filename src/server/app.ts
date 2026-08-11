@@ -1,14 +1,31 @@
 import { resolve } from "node:path";
 
 import express from "express";
+import type { Kysely } from "kysely";
 
 import type { HealthResponse } from "../shared/health";
+import { apiErrorHandler } from "./api/errors";
+import { createCompletionRouter, createTaskRouter } from "./api/tasks";
+import type { TimeSinceDatabase } from "./db/types";
+import type { Clock } from "./db/repositories/shared";
 
 export interface CreateAppOptions {
+  database: Kysely<TimeSinceDatabase>;
+  timeZone: string;
+  clock?: Clock;
   clientDirectory?: string;
 }
 
-export function createApp(options: CreateAppOptions = {}) {
+function validateTimeZone(timeZone: string): void {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone }).format();
+  } catch {
+    throw new RangeError(`Invalid IANA timezone: ${timeZone}`);
+  }
+}
+
+export function createApp(options: CreateAppOptions) {
+  validateTimeZone(options.timeZone);
   const app = express();
 
   app.disable("x-powered-by");
@@ -18,6 +35,14 @@ export function createApp(options: CreateAppOptions = {}) {
     const health: HealthResponse = { status: "ok" };
     response.json(health);
   });
+
+  const apiOptions = {
+    database: options.database,
+    timeZone: options.timeZone,
+    ...(options.clock ? { clock: options.clock } : {}),
+  };
+  app.use("/api/tasks", createTaskRouter(apiOptions));
+  app.use("/api/completions", createCompletionRouter(apiOptions));
 
   if (options.clientDirectory) {
     const clientDirectory = resolve(options.clientDirectory);
@@ -33,8 +58,11 @@ export function createApp(options: CreateAppOptions = {}) {
   }
 
   app.use((_request, response) => {
-    response.status(404).json({ error: "Not found" });
+    response.status(404).json({
+      error: { code: "NOT_FOUND", message: "Route not found" },
+    });
   });
+  app.use(apiErrorHandler);
 
   return app;
 }

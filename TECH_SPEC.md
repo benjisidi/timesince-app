@@ -214,6 +214,10 @@ For v1, target intervals are whole days.
 
 All elapsed/Ready calculations must be implemented in a shared domain helper and covered by unit tests.
 
+The backend supplies an explicitly configured deployment-level IANA timezone
+to that helper. The application must fail clearly at startup when the setting
+is absent or invalid rather than infer the server's local timezone.
+
 Elapsed days are calendar days, not rolling 24-hour periods. Calculate them as
 the number of local calendar-date boundaries between the latest completion and
 the current time in an explicitly supplied IANA timezone. The domain helper
@@ -289,9 +293,13 @@ POST   /api/tasks
 GET    /api/tasks/:id
 PATCH  /api/tasks/:id
 DELETE /api/tasks/:id
+POST   /api/tasks/:id/restore
 ```
 
 `DELETE` should archive the task by default rather than physically remove it.
+
+Task creation may include an optional past initial-completion timestamp. It is
+created atomically with the task.
 
 Useful `GET /api/tasks` query parameters may include:
 
@@ -299,9 +307,19 @@ Useful `GET /api/tasks` query parameters may include:
 categoryId=
 state=ready|sleeping|all
 includeArchived=false
+visibleInReady=true|false
 ```
 
 Do not create an `overdue` state.
+
+`state` filters semantic state only, so `state=ready` includes actively
+snoozed tasks. `visibleInReady` is an independent filter for the primary Ready
+list. Archived tasks are excluded by default and have `visibleInReady=false`.
+
+Archived tasks and their completion history remain readable. They are
+otherwise read-only: they cannot be edited, snoozed, completed, or have
+completion records removed. Restoring a task clears `archived_at`, updates
+`updated_at`, and preserves every other task field and completion record.
 
 ### Completions
 
@@ -313,9 +331,14 @@ DELETE /api/completions/:id
 
 `POST` records a completion.
 
+It may include an optional past `completedAt` instant and otherwise records the
+current time. Future completion instants are rejected at the API boundary.
+
 Deleting the newest completion supports the Undo workflow.
 
 Historical completion deletion can remain an internal/API capability until a history UI exists.
+Completion deletion always targets the exact completion ID supplied; there is
+no delete-latest shortcut.
 
 ### Snooze
 
@@ -329,6 +352,9 @@ PATCH /api/tasks/:id
 ```
 
 No separate snooze table is needed in v1.
+
+A non-null snooze instant must be in the future when submitted. `null`
+explicitly unsnoozes the task.
 
 ### Categories
 

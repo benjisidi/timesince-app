@@ -15,11 +15,12 @@ Use Node.js 22 (`.nvmrc`) and npm.
 
 ```text
 npm ci                  install dependencies from the lockfile
-npm run dev             start the frontend and backend in development
+TIME_ZONE=<IANA zone> npm run dev
+                        start the frontend and backend in development
 npm run db:migrate      apply database migrations explicitly
 npm run check           run typecheck, lint, format check, tests, and build
 npm run build           create the production frontend and server bundles
-NODE_ENV=production npm start
+TIME_ZONE=<IANA zone> NODE_ENV=production npm start
                         run the production build
 ```
 

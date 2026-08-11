@@ -161,5 +161,28 @@ export function createTaskRepository(
 
       return existing ? toTaskRecord(existing) : undefined;
     },
+
+    async restore(id: number): Promise<TaskRecord | undefined> {
+      const timestamp = toIsoTimestamp(clock());
+      const restored = await database
+        .updateTable("tasks")
+        .set({ archived_at: null, updated_at: timestamp })
+        .where("id", "=", id)
+        .where("archived_at", "is not", null)
+        .returningAll()
+        .executeTakeFirst();
+
+      if (restored) {
+        return toTaskRecord(restored);
+      }
+
+      const existing = await database
+        .selectFrom("tasks")
+        .selectAll()
+        .where("id", "=", id)
+        .executeTakeFirst();
+
+      return existing ? toTaskRecord(existing) : undefined;
+    },
   };
 }

@@ -58,6 +58,16 @@ export function createCompletionRepository(
       return completions.map(toCompletionRecord);
     },
 
+    async getById(id: number): Promise<CompletionRecord | undefined> {
+      const completion = await database
+        .selectFrom("completions")
+        .selectAll()
+        .where("id", "=", id)
+        .executeTakeFirst();
+
+      return completion ? toCompletionRecord(completion) : undefined;
+    },
+
     async getLatestForTask(
       taskId: number,
     ): Promise<CompletionRecord | undefined> {
@@ -70,6 +80,31 @@ export function createCompletionRepository(
         .executeTakeFirst();
 
       return completion ? toCompletionRecord(completion) : undefined;
+    },
+
+    async getLatestForTasks(
+      taskIds: readonly number[],
+    ): Promise<Map<number, string>> {
+      if (taskIds.length === 0) {
+        return new Map();
+      }
+
+      const completions = await database
+        .selectFrom("completions")
+        .select("task_id")
+        .select((expression) =>
+          expression.fn.max<string>("completed_at").as("completed_at"),
+        )
+        .where("task_id", "in", taskIds)
+        .groupBy("task_id")
+        .execute();
+
+      return new Map(
+        completions.map((completion) => [
+          completion.task_id,
+          completion.completed_at,
+        ]),
+      );
     },
 
     async remove(id: number): Promise<CompletionRecord | undefined> {

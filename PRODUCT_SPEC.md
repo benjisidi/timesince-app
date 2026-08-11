@@ -233,6 +233,9 @@ A task editor should support:
 - optional snooze/ignore-until value when editing;
 - archive/delete action when editing an existing task.
 
+Archived tasks retain their fields and completion history. They are read-only
+until explicitly restored to active status.
+
 Keep the common path short. Advanced controls should not dominate the editor.
 
 ---
@@ -354,6 +357,7 @@ v1 includes:
 - elapsed/over-target display;
 - snooze/ignore-until;
 - task archiving;
+- task restoration;
 - SQLite persistence;
 - private deployment through Tailscale;
 - basic backup/restore procedure.

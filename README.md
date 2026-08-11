@@ -29,7 +29,7 @@ supports TypeScript 7's new programmatic API.
 Start the React frontend and Express backend together:
 
 ```sh
-npm run dev
+TIME_ZONE=Europe/London npm run dev
 ```
 
 Open <http://127.0.0.1:5173>. Vite proxies `/api` requests to the backend at
@@ -37,6 +37,9 @@ Open <http://127.0.0.1:5173>. Vite proxies `/api` requests to the backend at
 
 The local SQLite database defaults to `data/timesince.sqlite`. Set
 `DATABASE_PATH` to use a different location.
+
+`TIME_ZONE` is required and must contain the deployment's IANA timezone. It is
+used for local calendar-day task-state calculations.
 
 ## Database migrations
 
@@ -73,7 +76,7 @@ npm run build
 ```sh
 npm run build
 npm run db:migrate:prod
-NODE_ENV=production npm start
+TIME_ZONE=Europe/London NODE_ENV=production npm start
 ```
 
 The production Express process serves both the JSON API and the built frontend

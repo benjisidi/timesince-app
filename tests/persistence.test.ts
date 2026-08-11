@@ -168,6 +168,15 @@ describe("task persistence", () => {
       archived,
     );
     expect(await completions.listForTask(task.id)).toHaveLength(1);
+
+    now = new Date("2026-08-11T11:00:00.000Z");
+    const restored = await tasks.restore(task.id);
+    expect(restored).toMatchObject({
+      archivedAt: null,
+      updatedAt: "2026-08-11T11:00:00.000Z",
+    });
+    expect(await tasks.getById(task.id)).toEqual(restored);
+    expect(await completions.listForTask(task.id)).toHaveLength(1);
   });
 });
 
