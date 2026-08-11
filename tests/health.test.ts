@@ -53,16 +53,16 @@ describe("GET /api/health", () => {
       "<!doctype html><title>TimeSince test client</title>",
     );
 
-    const response = await request(
-      createApp({
-        clientDirectory,
-        database,
-        timeZone: "Europe/London",
-      }),
-    ).get("/categories");
-
-    expect(response.status).toBe(200);
-    expect(response.headers["content-type"]).toMatch(/^text\/html/);
-    expect(response.text).toContain("TimeSince test client");
+    const app = createApp({
+      clientDirectory,
+      database,
+      timeZone: "Europe/London",
+    });
+    for (const path of ["/categories", "/categories/manage"]) {
+      const response = await request(app).get(path);
+      expect(response.status).toBe(200);
+      expect(response.headers["content-type"]).toMatch(/^text\/html/);
+      expect(response.text).toContain("TimeSince test client");
+    }
   });
 });

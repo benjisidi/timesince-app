@@ -20,6 +20,18 @@ export interface CreateCompletionBody {
   completedAt?: Date;
 }
 
+export interface CreateCategoryBody {
+  name: string;
+}
+
+export interface UpdateCategoryBody {
+  name: string;
+}
+
+export interface ReorderCategoriesBody {
+  categoryIds: number[];
+}
+
 function invalidRequest(
   message: string,
   fields?: Record<string, string>,
@@ -54,6 +66,16 @@ function parseName(value: unknown): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     return invalidRequest("Task name must not be blank", {
       name: "Must be a non-blank string",
+    });
+  }
+
+  return value.trim();
+}
+
+function parseCategoryName(value: unknown): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return invalidRequest("Category name must not be blank", {
+      name: "Enter a category name",
     });
   }
 
@@ -292,6 +314,60 @@ export function parseCreateCompletionBody(
 export function assertEmptyBody(body: unknown): void {
   const value = asObject(body);
   assertAllowedKeys(value, []);
+}
+
+export function parseCreateCategoryBody(body: unknown): CreateCategoryBody {
+  const value = asObject(body);
+  assertAllowedKeys(value, ["name"]);
+  if (!("name" in value)) {
+    return invalidRequest("Category name is required", {
+      name: "Enter a category name",
+    });
+  }
+  return { name: parseCategoryName(value.name) };
+}
+
+export function parseUpdateCategoryBody(body: unknown): UpdateCategoryBody {
+  const value = asObject(body);
+  assertAllowedKeys(value, ["name"]);
+  if (!("name" in value)) {
+    return invalidRequest("Category name is required", {
+      name: "Enter a category name",
+    });
+  }
+  return { name: parseCategoryName(value.name) };
+}
+
+export function parseReorderCategoriesBody(
+  body: unknown,
+): ReorderCategoriesBody {
+  const value = asObject(body);
+  assertAllowedKeys(value, ["categoryIds"]);
+  if (!Array.isArray(value.categoryIds)) {
+    return invalidRequest("categoryIds must be an array", {
+      categoryIds: "Supply the complete ordered category ID list",
+    });
+  }
+
+  const categoryIds = value.categoryIds.map((id) =>
+    parsePositiveInteger(id, "categoryIds"),
+  );
+  if (new Set(categoryIds).size !== categoryIds.length) {
+    return invalidRequest("categoryIds must not contain duplicates", {
+      categoryIds: "Each category must appear exactly once",
+    });
+  }
+  return { categoryIds };
+}
+
+export function parseReplacementCategoryQuery(value: unknown): number | null {
+  if (value === undefined || value === "") {
+    return null;
+  }
+  if (typeof value !== "string") {
+    return invalidRequest("replacementCategoryId must be a positive integer");
+  }
+  return parseId(value, "replacementCategoryId");
 }
 
 export function parseBooleanQuery(

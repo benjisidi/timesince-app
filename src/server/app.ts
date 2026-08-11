@@ -50,7 +50,10 @@ export function createApp(options: CreateAppOptions) {
   };
   app.use("/api/tasks", createTaskRouter(apiOptions));
   app.use("/api/completions", createCompletionRouter(apiOptions));
-  app.use("/api/categories", createCategoryRouter(options.database));
+  app.use(
+    "/api/categories",
+    createCategoryRouter(options.database, options.clock),
+  );
 
   if (options.clientDirectory) {
     const clientDirectory = resolve(options.clientDirectory);

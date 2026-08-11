@@ -2,10 +2,14 @@ import type {
   AppConfigResponse,
   ApiErrorResponse,
   CategoryListResponse,
+  CategoryResponse,
   CompletionMutationResponse,
+  CreateCategoryRequest,
   CreateTaskRequest,
+  ReorderCategoriesRequest,
   TaskListResponse,
   TaskResponse,
+  UpdateCategoryRequest,
   UpdateTaskRequest,
 } from "../shared/api";
 
@@ -69,6 +73,62 @@ export async function fetchCategoryView(signal: AbortSignal) {
   ]);
 
   return { tasks, categories, timeZone: config.timeZone };
+}
+
+export async function fetchCategories(signal?: AbortSignal) {
+  const response = await fetch(
+    "/api/categories",
+    signal ? { signal } : undefined,
+  );
+  return (await readJson<CategoryListResponse>(response)).categories;
+}
+
+export async function createCategory(
+  input: CreateCategoryRequest,
+): Promise<CategoryResponse> {
+  const response = await fetch("/api/categories", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson<CategoryResponse>(response);
+}
+
+export async function renameCategory(
+  categoryId: number,
+  input: UpdateCategoryRequest,
+): Promise<CategoryResponse> {
+  const response = await fetch(`/api/categories/${categoryId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return readJson<CategoryResponse>(response);
+}
+
+export async function reorderCategories(
+  input: ReorderCategoriesRequest,
+): Promise<CategoryResponse[]> {
+  const response = await fetch("/api/categories/order", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  return (await readJson<CategoryListResponse>(response)).categories;
+}
+
+export async function deleteCategory(
+  categoryId: number,
+  replacementCategoryId: number | null,
+): Promise<CategoryResponse[]> {
+  const query =
+    replacementCategoryId === null
+      ? ""
+      : `?replacementCategoryId=${replacementCategoryId}`;
+  const response = await fetch(`/api/categories/${categoryId}${query}`, {
+    method: "DELETE",
+  });
+  return (await readJson<CategoryListResponse>(response)).categories;
 }
 
 export async function completeTask(

@@ -154,6 +154,10 @@ summary:focus-visible {
 }
 
 .page-intro {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
   margin-bottom: 1.5rem;
 }
 
@@ -172,6 +176,129 @@ summary:focus-visible {
   font-weight: 750;
   letter-spacing: 0.105em;
   text-transform: uppercase;
+}
+
+.page-action {
+  flex: 0 0 auto;
+  min-height: 2.75rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #aebdb3;
+  border-radius: 0.7rem;
+  background: #fff;
+  color: #2f654f;
+  font-size: 0.85rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.create-category-form,
+.category-management {
+  border: 1px solid #cbd5cd;
+  border-radius: 1rem;
+  background: #fff;
+  box-shadow: 0 0.5rem 1.5rem rgb(36 49 44 / 5%);
+}
+
+.create-category-form {
+  padding: 0 1rem 1rem;
+}
+
+.category-create-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+}
+
+.category-create-controls .primary-button {
+  min-width: 4.75rem;
+}
+
+.category-management {
+  overflow: hidden;
+  margin-top: 1rem;
+}
+
+.category-management > .form-error {
+  margin: 1rem;
+}
+
+.category-management-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.category-management-list > li {
+  display: grid;
+  gap: 0.8rem;
+  padding: 1rem;
+}
+
+.category-management-list > li + li {
+  border-top: 1px solid #e0e6e1;
+}
+
+.category-management-identity {
+  min-width: 0;
+}
+
+.category-management-identity h2 {
+  margin: 0;
+  color: #24312c;
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.category-management-identity span {
+  display: block;
+  margin-top: 0.2rem;
+  color: #6a7a72;
+  font-size: 0.76rem;
+}
+
+.category-management-actions {
+  display: grid;
+  grid-template-columns: 2.75rem 2.75rem 1fr 1fr;
+  gap: 0.45rem;
+}
+
+.category-management-actions button,
+.category-rename-form button {
+  min-height: 2.75rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid #aebdb3;
+  border-radius: 0.6rem;
+  background: #fff;
+  color: #34483e;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 720;
+}
+
+.category-management-actions .remove-category-button {
+  color: #754c3b;
+}
+
+.category-rename-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.5rem;
+}
+
+.category-rename-form input {
+  width: 100%;
+  min-height: 2.75rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid #aebdb3;
+  border-radius: 0.6rem;
+  color: #1d2924;
+}
+
+.delete-category-summary {
+  margin: 0;
+  color: #53655c;
+  font-size: 0.86rem;
+  line-height: 1.55;
 }
 
 .task-section {
@@ -843,6 +970,19 @@ button:disabled {
 
   .task-row {
     padding-right: 1rem;
+  }
+
+  .category-management-list > li {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .category-management-actions {
+    grid-template-columns: 2.75rem 2.75rem auto auto;
+  }
+
+  .category-rename-form {
+    grid-column: 1 / -1;
   }
 
   .task-dialog {

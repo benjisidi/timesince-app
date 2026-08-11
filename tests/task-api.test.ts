@@ -81,13 +81,117 @@ describe("task API", () => {
     const categoryResponse = await api.get("/api/categories");
     expect(categoryResponse.status).toBe(200);
     expect(categoryResponse.body.categories).toEqual([
-      { id: earlier.id, name: "Admin", position: 1 },
-      { id: later.id, name: "Garden", position: 2 },
+      { id: earlier.id, name: "Admin", position: 1, activeTaskCount: 0 },
+      { id: later.id, name: "Garden", position: 2, activeTaskCount: 0 },
     ]);
 
     const configResponse = await api.get("/api/config");
     expect(configResponse.status).toBe(200);
     expect(configResponse.body).toEqual({ timeZone: TIME_ZONE });
+  });
+
+  it("creates, renames, counts, reorders, and removes categories with reassignment", async () => {
+    const { api } = await setup();
+    const kitchen = await api
+      .post("/api/categories")
+      .send({ name: "  Kitchen  " });
+    const garden = await api.post("/api/categories").send({ name: "Garden" });
+    const admin = await api.post("/api/categories").send({ name: "Admin" });
+
+    expect(kitchen.status).toBe(201);
+    expect(kitchen.body).toEqual({
+      id: expect.any(Number),
+      name: "Kitchen",
+      position: 0,
+      activeTaskCount: 0,
+    });
+    expect(
+      (await api.post("/api/categories").send({ name: "kItChEn" })).status,
+    ).toBe(409);
+    expect(
+      (await api.post("/api/categories").send({ name: "  " })).status,
+    ).toBe(400);
+
+    const activeTask = await api.post("/api/tasks").send({
+      name: "Clean worktop",
+      categoryId: kitchen.body.id,
+      targetIntervalDays: 7,
+    });
+    const archivedTask = await api.post("/api/tasks").send({
+      name: "Old garden job",
+      categoryId: kitchen.body.id,
+      targetIntervalDays: 30,
+    });
+    await api
+      .post(`/api/tasks/${archivedTask.body.id}/completions`)
+      .send({ completedAt: "2026-08-01T08:00:00.000Z" });
+    await api.delete(`/api/tasks/${archivedTask.body.id}`);
+
+    expect((await api.get("/api/categories")).body.categories[0]).toMatchObject(
+      {
+        id: kitchen.body.id,
+        activeTaskCount: 1,
+      },
+    );
+
+    const renamed = await api
+      .patch(`/api/categories/${garden.body.id}`)
+      .send({ name: "Outdoors" });
+    expect(renamed.body).toMatchObject({
+      name: "Outdoors",
+      activeTaskCount: 0,
+    });
+
+    const categoryIds = [admin.body.id, garden.body.id, kitchen.body.id];
+    const reordered = await api
+      .put("/api/categories/order")
+      .send({ categoryIds });
+    expect(reordered.status).toBe(200);
+    expect(
+      reordered.body.categories.map(
+        ({ id, position }: { id: number; position: number }) => ({
+          id,
+          position,
+        }),
+      ),
+    ).toEqual(categoryIds.map((id, position) => ({ id, position })));
+    expect(
+      (
+        await api
+          .put("/api/categories/order")
+          .send({ categoryIds: [admin.body.id] })
+      ).status,
+    ).toBe(400);
+
+    const removed = await api.delete(
+      `/api/categories/${kitchen.body.id}?replacementCategoryId=${garden.body.id}`,
+    );
+    expect(removed.status).toBe(200);
+    expect(
+      (await api.get(`/api/tasks/${activeTask.body.id}`)).body.category,
+    ).toEqual({
+      id: garden.body.id,
+      name: "Outdoors",
+    });
+    expect(
+      (await api.get(`/api/tasks/${archivedTask.body.id}`)).body,
+    ).toMatchObject({
+      archivedAt: expect.any(String),
+      category: { id: garden.body.id, name: "Outdoors" },
+    });
+    expect(
+      (await api.get(`/api/tasks/${archivedTask.body.id}/completions`)).body
+        .completions,
+    ).toHaveLength(1);
+    expect((await api.get("/api/categories")).body.categories).toEqual([
+      { id: admin.body.id, name: "Admin", position: 0, activeTaskCount: 0 },
+      {
+        id: garden.body.id,
+        name: "Outdoors",
+        position: 1,
+        activeTaskCount: 1,
+      },
+    ]);
   });
 
   it("filters semantic state separately from Ready-list visibility and orders each state", async () => {

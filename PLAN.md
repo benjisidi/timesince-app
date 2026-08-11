@@ -422,7 +422,14 @@ A user can:
 
 # Milestone 9 — Category management
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-11. Category management now provides validated create,
+rename, exact-list reorder, and removal APIs; active-task counts; optional
+atomic reassignment including archived tasks; a responsive, accessible
+management route; and immediate reconciliation across category browsing, task
+labels, and task-editor options. Focused API and frontend tests cover the core
+mutation and error-preservation workflows.
 
 ## Goal
 

@@ -15,10 +15,23 @@ export interface TaskCategoryResponse {
 
 export interface CategoryResponse extends TaskCategoryResponse {
   position: number;
+  activeTaskCount: number;
 }
 
 export interface CategoryListResponse {
   categories: CategoryResponse[];
+}
+
+export interface CreateCategoryRequest {
+  name: string;
+}
+
+export interface UpdateCategoryRequest {
+  name: string;
+}
+
+export interface ReorderCategoriesRequest {
+  categoryIds: number[];
 }
 
 export interface AppConfigResponse {
