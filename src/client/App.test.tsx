@@ -481,6 +481,101 @@ describe("Task view", () => {
     });
   });
 
+  it("keeps the drawer open for repeated creation and only retains category", async () => {
+    const createdTasks = [
+      task({
+        id: 3,
+        name: "Dust shelves",
+        category: { id: 2, name: "Bedroom" },
+        targetIntervalDays: 14,
+        lastCompletedAt: null,
+        elapsedDays: null,
+        overageDays: null,
+      }),
+      task({
+        id: 4,
+        name: "Turn mattress",
+        category: { id: 2, name: "Bedroom" },
+        targetIntervalDays: 90,
+        lastCompletedAt: null,
+        elapsedDays: null,
+        overageDays: null,
+      }),
+    ];
+    const createBodies: unknown[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("state=ready")) return jsonResponse({ tasks: [] });
+      if (url.includes("state=sleeping")) return jsonResponse({ tasks: [] });
+      if (url === "/api/categories") {
+        return jsonResponse({
+          categories: [{ id: 2, name: "Bedroom", position: 0 }],
+        });
+      }
+      if (url === "/api/config") {
+        return jsonResponse({ timeZone: "Europe/London" });
+      }
+      if (url === "/api/tasks" && init?.method === "POST") {
+        createBodies.push(JSON.parse(String(init.body)));
+        return jsonResponse(createdTasks[createBodies.length - 1], 201);
+      }
+      return jsonResponse({ error: { code: "NOT_FOUND", message: "No" } }, 404);
+    });
+
+    renderApp();
+    await screen.findByRole("heading", { name: "Ready 0 tasks" });
+    await userEvent.click(screen.getByRole("button", { name: "Add task" }));
+    await screen.findByRole("option", { name: "Bedroom" });
+
+    const nameInput = screen.getByLabelText("Name") as HTMLInputElement;
+    const targetInput = screen.getByLabelText(
+      /Target interval/,
+    ) as HTMLInputElement;
+    const categorySelect = screen.getByLabelText(
+      "Category",
+    ) as HTMLSelectElement;
+    const createAnother = screen.getByLabelText(
+      /Create another task/,
+    ) as HTMLInputElement;
+
+    await userEvent.type(nameInput, "Dust shelves");
+    await userEvent.type(targetInput, "14");
+    await userEvent.selectOptions(categorySelect, "2");
+    await userEvent.click(createAnother);
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }));
+
+    await screen.findByRole("button", { name: "Edit Dust shelves" });
+    await waitFor(() => {
+      expect(nameInput.value).toBe("");
+      expect(targetInput.value).toBe("");
+      expect(categorySelect.value).toBe("2");
+      expect(document.activeElement).toBe(nameInput);
+    });
+    expect(screen.getByRole("dialog", { name: "Create task" })).toBeTruthy();
+
+    await userEvent.type(nameInput, "Turn mattress");
+    await userEvent.type(targetInput, "90");
+    await userEvent.click(createAnother);
+    await userEvent.click(screen.getByRole("button", { name: "Create task" }));
+
+    await screen.findByRole("button", { name: "Edit Turn mattress" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(createBodies).toEqual([
+      {
+        name: "Dust shelves",
+        categoryId: 2,
+        targetIntervalDays: 14,
+        initialCompletedAt: null,
+      },
+      {
+        name: "Turn mattress",
+        categoryId: 2,
+        targetIntervalDays: 90,
+        initialCompletedAt: null,
+      },
+    ]);
+  });
+
   it("opens editing from a task row and preserves values after an API error", async () => {
     const readyTask = task({ id: 1, name: "Hoover floor" });
     const updatedTask = task({ ...readyTask, name: "Vacuum floor" });

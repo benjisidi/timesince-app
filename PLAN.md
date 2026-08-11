@@ -464,7 +464,16 @@ Category-name conflicts should be handled clearly.
 
 # Milestone 10 — Desktop layout
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-11. The responsive application now uses persistent sidebar
+navigation at desktop widths, wider and optionally two-column task/category
+layouts, horizontally structured task rows, a right-side task editor, and a
+denser category-management view. Desktop category cards compact independently
+when collapsed, and task creation can keep the editor open for efficient bulk
+entry while preserving the selected category. The existing mobile header,
+touch targets, shared components, routes, state, and task semantics remain
+intact.
 
 ## Goal
 

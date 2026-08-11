@@ -33,13 +33,18 @@ textarea {
 button:focus-visible,
 input:focus-visible,
 select:focus-visible,
-summary:focus-visible {
+summary:focus-visible,
+a:focus-visible {
   outline: 3px solid #31745b;
   outline-offset: 3px;
 }
 
 .app-shell {
   min-height: 100vh;
+}
+
+.app-content {
+  min-width: 0;
 }
 
 .app-header {
@@ -191,6 +196,17 @@ summary:focus-visible {
   text-decoration: none;
 }
 
+.page-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.desktop-add-task-button {
+  display: none;
+}
+
 .create-category-form,
 .category-management {
   border: 1px solid #cbd5cd;
@@ -308,6 +324,10 @@ summary:focus-visible {
   border-radius: 1rem;
   background: #fff;
   box-shadow: 0 0.5rem 1.5rem rgb(36 49 44 / 5%);
+}
+
+.category-groups .task-section:first-child {
+  margin-top: 0;
 }
 
 .task-section h2 {
@@ -615,6 +635,10 @@ summary:focus-visible {
   place-items: center;
 }
 
+.add-task-label {
+  display: none;
+}
+
 .add-task-button:hover {
   background: #245b45;
 }
@@ -850,6 +874,42 @@ summary:focus-visible {
   margin: 0.75rem 0 0;
 }
 
+.create-another-option {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #d5ded7;
+  border-radius: 0.7rem;
+  background: #fff;
+  color: #2b3933;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 720;
+}
+
+.create-another-option input {
+  flex: 0 0 auto;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  accent-color: #2e6d54;
+}
+
+.create-another-option span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.create-another-option small {
+  color: #718078;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
 .form-error {
   margin: 0 0 0.75rem;
   padding: 0.75rem;
@@ -994,6 +1054,223 @@ button:disabled {
   .dialog-panel {
     padding: 1.5rem;
     box-shadow: 0 1.5rem 4rem rgb(15 29 22 / 24%);
+  }
+}
+
+@media (min-width: 64rem) {
+  .app-shell {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .app-header {
+    position: sticky;
+    top: 0;
+    min-height: 100vh;
+    border-right: 1px solid #cdd6cf;
+    border-bottom: 0;
+  }
+
+  .app-header > div {
+    width: 100%;
+    min-height: 100vh;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 2rem 1.25rem;
+  }
+
+  .app-brand {
+    padding: 0 0.55rem;
+  }
+
+  .desktop-navigation {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.3rem;
+    margin-top: 2.25rem;
+  }
+
+  .desktop-navigation a {
+    display: flex;
+    min-height: 2.75rem;
+    align-items: center;
+    padding: 0.7rem 0.8rem;
+  }
+
+  .task-page {
+    width: min(100%, 80rem);
+    padding: 2.5rem clamp(2rem, 4vw, 4rem) 5rem;
+  }
+
+  .page-intro {
+    margin-bottom: 2rem;
+  }
+
+  .page-intro h1 {
+    font-size: clamp(2.5rem, 5vw, 3.5rem);
+  }
+
+  .desktop-add-task-button {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.65rem 1rem;
+    border: 1px solid #2e6d54;
+    border-radius: 0.7rem;
+    background: #2e6d54;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.86rem;
+    font-weight: 760;
+  }
+
+  .desktop-add-task-button:hover {
+    background: #245b45;
+  }
+
+  .desktop-add-task-button > span:first-child {
+    font-size: 1.2rem;
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  .desktop-add-task-button .add-task-label {
+    display: inline;
+  }
+
+  .add-task-button {
+    display: none;
+  }
+
+  .undo-stack {
+    right: 2rem;
+    bottom: 2rem;
+  }
+
+  .task-row {
+    min-height: 4.5rem;
+    grid-template-columns: 3rem minmax(0, 1fr);
+    padding: 0.45rem 1rem 0.45rem 0.65rem;
+  }
+
+  .task-edit-control {
+    min-height: 3.6rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1.25rem;
+  }
+
+  .task-edit-control-with-category .task-identity {
+    display: grid;
+    grid-template-columns: minmax(10rem, 1fr) minmax(7rem, 0.6fr);
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .task-edit-control-with-category .task-category {
+    margin-top: 0;
+  }
+
+  .task-timing {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: baseline;
+    gap: 1rem;
+  }
+
+  .task-target {
+    margin-top: 0;
+  }
+
+  .category-groups {
+    margin-top: 1rem;
+  }
+
+  .create-category-form {
+    padding: 1rem 1.25rem;
+  }
+
+  .create-category-form .form-field {
+    grid-template-columns: 9rem minmax(0, 1fr);
+    align-items: center;
+    margin-top: 0;
+  }
+
+  .create-category-form .form-field > small {
+    grid-column: 2;
+  }
+
+  .category-management-list > li {
+    gap: 1.5rem;
+    padding: 0.8rem 1.25rem;
+  }
+
+  .category-management-identity {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) 9rem;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .category-management-identity span {
+    margin-top: 0;
+  }
+
+  .category-rename-form {
+    grid-template-columns: minmax(16rem, 1fr) auto auto;
+  }
+
+  .task-dialog {
+    width: min(32rem, calc(100% - 2rem));
+    max-height: 100dvh;
+    margin: 0 0 0 auto;
+    border-radius: 1.2rem 0 0 1.2rem;
+  }
+
+  .dialog-panel {
+    min-height: 100dvh;
+    max-height: 100dvh;
+    padding: 2rem;
+    box-shadow: -1.5rem 0 4rem rgb(15 29 22 / 20%);
+  }
+}
+
+@media (min-width: 78rem) {
+  .task-sections {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 1.5rem;
+  }
+
+  .task-sections .task-section {
+    margin-top: 0;
+  }
+
+  .category-groups {
+    display: grid;
+    grid-auto-flow: dense;
+    grid-auto-rows: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    column-gap: 1.5rem;
+    row-gap: 0;
+  }
+
+  .category-groups .category-section {
+    grid-row-end: span var(--category-grid-span);
+    margin-top: 0;
+  }
+
+  .category-groups .category-section:nth-child(odd) {
+    grid-column: 1;
+  }
+
+  .category-groups .category-section:nth-child(even) {
+    grid-column: 2;
   }
 }
 

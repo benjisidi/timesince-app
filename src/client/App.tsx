@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type FormEvent,
@@ -57,6 +58,8 @@ interface UndoItem {
 
 const UNDO_LIFETIME_MS = 5_000;
 const COLLAPSED_CATEGORIES_KEY = "timesince.collapsed-categories.v1";
+const CATEGORY_GRID_ROW_PX = 8;
+const CATEGORY_GRID_GAP_PX = 24;
 
 function compareByNameAndId(first: TaskResponse, second: TaskResponse) {
   return first.name.localeCompare(second.name) || first.id - second.id;
@@ -170,7 +173,7 @@ function TaskRow({
         <span aria-hidden="true" />
       </button>
       <button
-        className="task-edit-control"
+        className={`task-edit-control${showCategory ? " task-edit-control-with-category" : ""}`}
         type="button"
         aria-label={`Edit ${task.name}`}
         onClick={() => onEdit(task)}
@@ -255,7 +258,11 @@ interface TaskEditorProps {
   dependencyState: DependencyState;
   onRetryDependencies: () => void;
   onClose: () => void;
-  onSaved: (task: TaskResponse, action: "created" | "updated") => void;
+  onSaved: (
+    task: TaskResponse,
+    action: "created" | "updated",
+    keepOpen?: boolean,
+  ) => void;
   onArchived: (task: TaskResponse) => void;
 }
 
@@ -269,6 +276,7 @@ function TaskEditor({
   onArchived,
 }: TaskEditorProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const task = editor.mode === "edit" ? editor.task : null;
   const [draft, setDraft] = useState<TaskDraft>({
     name: task?.name ?? "",
@@ -282,6 +290,7 @@ function TaskEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [isArchiving, setIsArchiving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
+  const [createAnother, setCreateAnother] = useState(false);
   const [openedAt] = useState(() => new Date());
 
   useEffect(() => {
@@ -366,7 +375,17 @@ function TaskEditor({
           ...common,
           initialCompletedAt: draft.initialCompletedAt || null,
         });
-        onSaved(saved, "created");
+        onSaved(saved, "created", createAnother);
+        if (createAnother) {
+          setDraft((current) => ({
+            ...current,
+            name: "",
+            targetIntervalDays: "",
+            initialCompletedAt: "",
+          }));
+          setErrors({});
+          window.setTimeout(() => nameInputRef.current?.focus(), 0);
+        }
       } else {
         const saved = await updateTask(editor.task.id, {
           ...common,
@@ -460,6 +479,7 @@ function TaskEditor({
           <label className="form-field">
             <span>Name</span>
             <input
+              ref={nameInputRef}
               data-initial-focus={editor.mode === "create" ? "" : undefined}
               value={draft.name}
               onChange={(event) => setField("name", event.target.value)}
@@ -607,6 +627,21 @@ function TaskEditor({
             <p className="timezone-help" id="date-timezone-help">
               Dates use {dependencies.timeZone}.
             </p>
+          ) : null}
+
+          {editor.mode === "create" ? (
+            <label className="create-another-option">
+              <input
+                type="checkbox"
+                checked={createAnother}
+                onChange={(event) => setCreateAnother(event.target.checked)}
+                disabled={isBusy}
+              />
+              <span>
+                Create another task
+                <small>Keep this panel open and reuse the category.</small>
+              </span>
+            </label>
           ) : null}
 
           <div className="form-actions">
@@ -782,6 +817,28 @@ function NavigationLinks({ onNavigate }: { onNavigate: () => void }) {
   );
 }
 
+function AddTaskButton({
+  accessibleName,
+  className,
+  onClick,
+}: {
+  accessibleName: string;
+  className: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={className}
+      onClick={onClick}
+      aria-label={accessibleName}
+    >
+      <span aria-hidden="true">+</span>
+      <span className="add-task-label">New task</span>
+    </button>
+  );
+}
+
 function AppNavigation() {
   const location = useLocation();
   const menuRef = useRef<HTMLDetailsElement>(null);
@@ -861,12 +918,35 @@ function CategorySection({
   onEdit,
   timeZone,
 }: CategorySectionProps) {
+  const sectionRef = useRef<HTMLElement>(null);
   const headingId = `category-${group.key}-heading`;
   const listId = `category-${group.key}-tasks`;
   const countLabel = `${group.tasks.length} ${group.tasks.length === 1 ? "task" : "tasks"}`;
 
+  useLayoutEffect(() => {
+    const section = sectionRef.current;
+    if (!section) return;
+
+    const updateGridSpan = () => {
+      const height = section.getBoundingClientRect().height;
+      const span = Math.max(
+        1,
+        Math.ceil((height + CATEGORY_GRID_GAP_PX) / CATEGORY_GRID_ROW_PX),
+      );
+      section.style.setProperty("--category-grid-span", String(span));
+    };
+
+    updateGridSpan();
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(updateGridSpan);
+    observer.observe(section);
+    return () => observer.disconnect();
+  }, [collapsed, group.tasks.length]);
+
   return (
     <section
+      ref={sectionRef}
       className="task-section category-section"
       aria-labelledby={headingId}
     >
@@ -915,6 +995,7 @@ interface CategoryViewProps {
   onRetry: () => void;
   onComplete: (task: TaskResponse, shouldFocusUndo: boolean) => void;
   onEdit: (task: TaskResponse) => void;
+  onCreate: () => void;
 }
 
 function CategoryView({
@@ -928,6 +1009,7 @@ function CategoryView({
   onRetry,
   onComplete,
   onEdit,
+  onCreate,
 }: CategoryViewProps) {
   const [collapsedCategories, setCollapsedCategories] = useState(
     readCollapsedCategories,
@@ -991,9 +1073,16 @@ function CategoryView({
           <p className="eyebrow">Tasks grouped by where they belong</p>
           <h1 id="category-view-title">Categories</h1>
         </div>
-        <NavLink className="page-action" to="/categories/manage">
-          Manage
-        </NavLink>
+        <div className="page-actions">
+          <NavLink className="page-action" to="/categories/manage">
+            Manage
+          </NavLink>
+          <AddTaskButton
+            accessibleName="New task"
+            className="desktop-add-task-button"
+            onClick={onCreate}
+          />
+        </div>
       </div>
 
       {loadState === "idle" || loadState === "loading" ? (
@@ -1021,8 +1110,9 @@ function CategoryView({
               {completionError}
             </p>
           ) : null}
-          {timeZone
-            ? groups.map((group) => (
+          {timeZone ? (
+            <div className="category-groups">
+              {groups.map((group) => (
                 <CategorySection
                   key={group.key}
                   group={group}
@@ -1034,8 +1124,9 @@ function CategoryView({
                   onEdit={onEdit}
                   timeZone={timeZone}
                 />
-              ))
-            : null}
+              ))}
+            </div>
+          ) : null}
         </>
       ) : null}
     </main>
@@ -1728,148 +1819,164 @@ export function App() {
   return (
     <div className="app-shell">
       <AppNavigation />
-      <Routes>
-        <Route
-          path="/"
-          element={
-            <main className="task-page" aria-labelledby="task-view-title">
-              <div className="page-intro">
-                <p className="eyebrow">Recurring tasks, without deadlines</p>
-                <h1 id="task-view-title">Tasks</h1>
-              </div>
-
-              {loadState === "loading" ? (
-                <p className="page-status" role="status">
-                  Loading tasks…
-                </p>
-              ) : null}
-              {loadState === "error" ? (
-                <div className="page-status error-state" role="alert">
-                  <p>
-                    Couldn’t load tasks. Check your connection and try again.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => setLoadAttempt((n) => n + 1)}
-                  >
-                    Retry
-                  </button>
+      <div className="app-content">
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <main className="task-page" aria-labelledby="task-view-title">
+                <div className="page-intro">
+                  <div>
+                    <p className="eyebrow">
+                      Recurring tasks, without deadlines
+                    </p>
+                    <h1 id="task-view-title">Tasks</h1>
+                  </div>
+                  <AddTaskButton
+                    accessibleName="New task"
+                    className="desktop-add-task-button"
+                    onClick={() => openEditor({ mode: "create" })}
+                  />
                 </div>
-              ) : null}
-              {loadState === "ready" ? (
-                <>
-                  {hasNoTasks ? (
-                    <p className="all-tasks-empty">
-                      No tasks yet. Add one to start tracking time since it was
-                      last done.
+
+                {loadState === "loading" ? (
+                  <p className="page-status" role="status">
+                    Loading tasks…
+                  </p>
+                ) : null}
+                {loadState === "error" ? (
+                  <div className="page-status error-state" role="alert">
+                    <p>
+                      Couldn’t load tasks. Check your connection and try again.
                     </p>
-                  ) : null}
-                  {completionError ? (
-                    <p className="completion-error" role="alert">
-                      {completionError}
-                    </p>
-                  ) : null}
-                  <TaskSection
-                    title="Ready"
-                    tasks={readyTasks}
-                    emptyMessage="Nothing is ready."
-                    completingTaskIds={completingTaskIds}
-                    completionDisabledTaskIds={completionDisabledTaskIds}
-                    onComplete={(task, shouldFocusUndo) =>
-                      void handleComplete(task, shouldFocusUndo)
-                    }
-                    onEdit={(task) => openEditor({ mode: "edit", task })}
-                  />
-                  <TaskSection
-                    title="Upcoming"
-                    tasks={upcomingTasks}
-                    emptyMessage="No upcoming tasks."
-                    completingTaskIds={completingTaskIds}
-                    completionDisabledTaskIds={completionDisabledTaskIds}
-                    onComplete={(task, shouldFocusUndo) =>
-                      void handleComplete(task, shouldFocusUndo)
-                    }
-                    onEdit={(task) => openEditor({ mode: "edit", task })}
-                  />
-                </>
-              ) : null}
-            </main>
-          }
-        />
-        <Route
-          path="/categories"
-          element={
-            <CategoryView
-              loadState={categoryLoadState}
-              tasks={categoryTasks}
-              categories={categoryList}
-              timeZone={categoryTimeZone}
-              completionError={completionError}
-              completingTaskIds={completingTaskIds}
-              completionDisabledTaskIds={completionDisabledTaskIds}
-              onRetry={() => setCategoryLoadAttempt((attempt) => attempt + 1)}
-              onComplete={(task, shouldFocusUndo) =>
-                void handleComplete(task, shouldFocusUndo)
-              }
-              onEdit={(task) => openEditor({ mode: "edit", task })}
-            />
-          }
-        />
-        <Route
-          path="/categories/manage"
-          element={
-            <ManageCategories
-              loadState={managementLoadState}
-              categories={categoryList}
-              onRetry={() => {
-                setManagementLoadState("loading");
-                setManagementLoadAttempt((attempt) => attempt + 1);
-              }}
-              onCreate={async (name) => {
-                const created = await createCategory({ name });
-                storeCategories(
-                  [...categoryList, created].sort(
-                    (first, second) =>
-                      first.position - second.position || first.id - second.id,
-                  ),
-                );
-              }}
-              onRename={async (categoryId, name) => {
-                const renamed = await renameCategory(categoryId, { name });
-                reconcileCategoryReference(categoryId, {
-                  id: renamed.id,
-                  name: renamed.name,
-                });
-                storeCategories(
-                  categoryList.map((category) =>
-                    category.id === categoryId ? renamed : category,
-                  ),
-                );
-              }}
-              onReorder={async (categoryIds) => {
-                storeCategories(await reorderCategories({ categoryIds }));
-              }}
-              onDelete={async (categoryId, replacementCategoryId) => {
-                const replacement =
-                  categoryList.find(({ id }) => id === replacementCategoryId) ??
-                  null;
-                const remainingCategories = await deleteCategory(
-                  categoryId,
-                  replacementCategoryId,
-                );
-                reconcileCategoryReference(
-                  categoryId,
-                  replacement
-                    ? { id: replacement.id, name: replacement.name }
-                    : null,
-                );
-                storeCategories(remainingCategories);
-              }}
-            />
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+                    <button
+                      type="button"
+                      onClick={() => setLoadAttempt((n) => n + 1)}
+                    >
+                      Retry
+                    </button>
+                  </div>
+                ) : null}
+                {loadState === "ready" ? (
+                  <>
+                    {hasNoTasks ? (
+                      <p className="all-tasks-empty">
+                        No tasks yet. Add one to start tracking time since it
+                        was last done.
+                      </p>
+                    ) : null}
+                    {completionError ? (
+                      <p className="completion-error" role="alert">
+                        {completionError}
+                      </p>
+                    ) : null}
+                    <div className="task-sections">
+                      <TaskSection
+                        title="Ready"
+                        tasks={readyTasks}
+                        emptyMessage="Nothing is ready."
+                        completingTaskIds={completingTaskIds}
+                        completionDisabledTaskIds={completionDisabledTaskIds}
+                        onComplete={(task, shouldFocusUndo) =>
+                          void handleComplete(task, shouldFocusUndo)
+                        }
+                        onEdit={(task) => openEditor({ mode: "edit", task })}
+                      />
+                      <TaskSection
+                        title="Upcoming"
+                        tasks={upcomingTasks}
+                        emptyMessage="No upcoming tasks."
+                        completingTaskIds={completingTaskIds}
+                        completionDisabledTaskIds={completionDisabledTaskIds}
+                        onComplete={(task, shouldFocusUndo) =>
+                          void handleComplete(task, shouldFocusUndo)
+                        }
+                        onEdit={(task) => openEditor({ mode: "edit", task })}
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </main>
+            }
+          />
+          <Route
+            path="/categories"
+            element={
+              <CategoryView
+                loadState={categoryLoadState}
+                tasks={categoryTasks}
+                categories={categoryList}
+                timeZone={categoryTimeZone}
+                completionError={completionError}
+                completingTaskIds={completingTaskIds}
+                completionDisabledTaskIds={completionDisabledTaskIds}
+                onRetry={() => setCategoryLoadAttempt((attempt) => attempt + 1)}
+                onComplete={(task, shouldFocusUndo) =>
+                  void handleComplete(task, shouldFocusUndo)
+                }
+                onEdit={(task) => openEditor({ mode: "edit", task })}
+                onCreate={() => openEditor({ mode: "create" })}
+              />
+            }
+          />
+          <Route
+            path="/categories/manage"
+            element={
+              <ManageCategories
+                loadState={managementLoadState}
+                categories={categoryList}
+                onRetry={() => {
+                  setManagementLoadState("loading");
+                  setManagementLoadAttempt((attempt) => attempt + 1);
+                }}
+                onCreate={async (name) => {
+                  const created = await createCategory({ name });
+                  storeCategories(
+                    [...categoryList, created].sort(
+                      (first, second) =>
+                        first.position - second.position ||
+                        first.id - second.id,
+                    ),
+                  );
+                }}
+                onRename={async (categoryId, name) => {
+                  const renamed = await renameCategory(categoryId, { name });
+                  reconcileCategoryReference(categoryId, {
+                    id: renamed.id,
+                    name: renamed.name,
+                  });
+                  storeCategories(
+                    categoryList.map((category) =>
+                      category.id === categoryId ? renamed : category,
+                    ),
+                  );
+                }}
+                onReorder={async (categoryIds) => {
+                  storeCategories(await reorderCategories({ categoryIds }));
+                }}
+                onDelete={async (categoryId, replacementCategoryId) => {
+                  const replacement =
+                    categoryList.find(
+                      ({ id }) => id === replacementCategoryId,
+                    ) ?? null;
+                  const remainingCategories = await deleteCategory(
+                    categoryId,
+                    replacementCategoryId,
+                  );
+                  reconcileCategoryReference(
+                    categoryId,
+                    replacement
+                      ? { id: replacement.id, name: replacement.name }
+                      : null,
+                  );
+                  storeCategories(remainingCategories);
+                }}
+              />
+            }
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
       <p className="visually-hidden" role="status" aria-live="polite">
         {announcement}
       </p>
@@ -1888,14 +1995,11 @@ export function App() {
       ) : null}
 
       {!isManageCategories ? (
-        <button
-          type="button"
+        <AddTaskButton
+          accessibleName="Add task"
           className="add-task-button"
           onClick={() => openEditor({ mode: "create" })}
-          aria-label="Add task"
-        >
-          <span aria-hidden="true">+</span>
-        </button>
+        />
       ) : null}
 
       {editor ? (
@@ -1906,12 +2010,12 @@ export function App() {
           dependencyState={dependencyState}
           onRetryDependencies={() => void loadDependencies()}
           onClose={closeEditor}
-          onSaved={(task, action) => {
+          onSaved={(task, action, keepOpen = false) => {
             reconcileTask(task);
             setAnnouncement(
-              `${action === "created" ? "Created" : "Updated"} ${task.name}.`,
+              `${action === "created" ? "Created" : "Updated"} ${task.name}.${keepOpen ? " Ready for another task." : ""}`,
             );
-            closeEditor();
+            if (!keepOpen) closeEditor();
           }}
           onArchived={(task) => {
             setReadyTasks((current) =>
