@@ -91,7 +91,11 @@ Create a clean, runnable full-stack skeleton using the agreed technology stack.
 
 # Milestone 2 — Database schema and persistence
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-11. The migrated SQLite schema, typed Kysely repositories,
+constraints, archive/category-removal behaviour, completion-history queries,
+and file-reopen persistence are covered by integration tests.
 
 ## Goal
 

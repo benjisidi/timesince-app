@@ -47,8 +47,8 @@ them automatically.
 npm run db:migrate
 ```
 
-The foundation has no schema migrations yet. The first schema is introduced in
-Milestone 2.
+The checked-in migrations create the category, task, and completion-history
+schema used by the persistence layer.
 
 ## Validation
 
