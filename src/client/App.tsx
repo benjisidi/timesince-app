@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type MouseEvent,
+} from "react";
 
 import type { CategoryResponse, TaskResponse } from "../shared/api";
 import {
@@ -6,8 +12,10 @@ import {
   completeTask,
   createTask,
   fetchEditorDependencies,
+  fetchTask,
   fetchTaskView,
   TaskApiError,
+  undoCompletion,
   updateTask,
 } from "./task-api";
 
@@ -29,6 +37,18 @@ interface TaskDraft {
 }
 
 type FormErrors = Partial<Record<keyof TaskDraft, string>>;
+type UndoStatus = "available" | "undoing" | "failed";
+
+interface UndoItem {
+  id: number;
+  completionId: number;
+  taskId: number;
+  taskName: string;
+  status: UndoStatus;
+  shouldFocus: boolean;
+}
+
+const UNDO_LIFETIME_MS = 5_000;
 
 function compareByNameAndId(first: TaskResponse, second: TaskResponse) {
   return first.name.localeCompare(second.name) || first.id - second.id;
@@ -97,11 +117,18 @@ function TaskElapsedTime({ task }: { task: TaskResponse }) {
 interface TaskRowProps {
   task: TaskResponse;
   isCompleting: boolean;
-  onComplete: (task: TaskResponse) => void;
+  isCompletionDisabled: boolean;
+  onComplete: (task: TaskResponse, shouldFocusUndo: boolean) => void;
   onEdit: (task: TaskResponse) => void;
 }
 
-function TaskRow({ task, isCompleting, onComplete, onEdit }: TaskRowProps) {
+function TaskRow({
+  task,
+  isCompleting,
+  isCompletionDisabled,
+  onComplete,
+  onEdit,
+}: TaskRowProps) {
   const targetDayLabel = task.targetIntervalDays === 1 ? "day" : "days";
 
   return (
@@ -110,8 +137,12 @@ function TaskRow({ task, isCompleting, onComplete, onEdit }: TaskRowProps) {
         className="completion-control"
         type="button"
         aria-label={`${isCompleting ? "Completing" : "Complete"} ${task.name}`}
-        disabled={isCompleting}
-        onClick={() => onComplete(task)}
+        data-completion-task-id={task.id}
+        data-pending={isCompleting}
+        disabled={isCompletionDisabled}
+        onClick={(event: MouseEvent<HTMLButtonElement>) =>
+          onComplete(task, event.detail === 0)
+        }
       >
         <span aria-hidden="true" />
       </button>
@@ -143,7 +174,8 @@ interface TaskSectionProps {
   tasks: TaskResponse[];
   emptyMessage: string;
   completingTaskIds: ReadonlySet<number>;
-  onComplete: (task: TaskResponse) => void;
+  completionDisabledTaskIds: ReadonlySet<number>;
+  onComplete: (task: TaskResponse, shouldFocusUndo: boolean) => void;
   onEdit: (task: TaskResponse) => void;
 }
 
@@ -152,6 +184,7 @@ function TaskSection({
   tasks,
   emptyMessage,
   completingTaskIds,
+  completionDisabledTaskIds,
   onComplete,
   onEdit,
 }: TaskSectionProps) {
@@ -172,6 +205,7 @@ function TaskSection({
               key={task.id}
               task={task}
               isCompleting={completingTaskIds.has(task.id)}
+              isCompletionDisabled={completionDisabledTaskIds.has(task.id)}
               onComplete={onComplete}
               onEdit={onEdit}
             />
@@ -609,6 +643,96 @@ function TaskEditor({
   );
 }
 
+function optimisticallyCompleteTask(task: TaskResponse): TaskResponse {
+  return {
+    ...task,
+    lastCompletedAt: new Date().toISOString(),
+    elapsedDays: 0,
+    overageDays: 0,
+    state: "sleeping",
+    visibleInReady: false,
+  };
+}
+
+interface UndoToastProps {
+  item: UndoItem;
+  onExpire: (itemId: number) => void;
+  onUndo: (item: UndoItem) => void;
+}
+
+function UndoToast({ item, onExpire, onUndo }: UndoToastProps) {
+  const undoButtonRef = useRef<HTMLButtonElement>(null);
+  const remainingMsRef = useRef(UNDO_LIFETIME_MS);
+  const hasFocusedRef = useRef(false);
+  const [isHovered, setIsHovered] = useState(false);
+  const [hasFocusWithin, setHasFocusWithin] = useState(false);
+
+  useEffect(() => {
+    if (
+      !item.shouldFocus ||
+      item.status !== "available" ||
+      hasFocusedRef.current
+    ) {
+      return;
+    }
+    hasFocusedRef.current = true;
+    undoButtonRef.current?.focus();
+  }, [item.shouldFocus, item.status]);
+
+  useEffect(() => {
+    if (item.status !== "available" || isHovered || hasFocusWithin) return;
+
+    const startedAt = Date.now();
+    const timer = window.setTimeout(
+      () => onExpire(item.id),
+      remainingMsRef.current,
+    );
+    return () => {
+      window.clearTimeout(timer);
+      remainingMsRef.current = Math.max(
+        0,
+        remainingMsRef.current - (Date.now() - startedAt),
+      );
+    };
+  }, [hasFocusWithin, isHovered, item.id, item.status, onExpire]);
+
+  return (
+    <section
+      className={`undo-toast${item.status === "failed" ? " undo-toast-error" : ""}`}
+      aria-label={`Completion feedback for ${item.taskName}`}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+      onFocusCapture={() => setHasFocusWithin(true)}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          setHasFocusWithin(false);
+        }
+      }}
+    >
+      <div>
+        <p>{item.status === "failed" ? "Undo failed" : "Completed"}</p>
+        <span>{item.taskName}</span>
+        {item.status === "failed" ? (
+          <small role="alert">Check your connection and try again.</small>
+        ) : null}
+      </div>
+      <button
+        ref={undoButtonRef}
+        type="button"
+        disabled={item.status === "undoing"}
+        aria-label={`${item.status === "failed" ? "Retry undo for" : "Undo completion of"} ${item.taskName}`}
+        onClick={() => onUndo(item)}
+      >
+        {item.status === "undoing"
+          ? "Undoing…"
+          : item.status === "failed"
+            ? "Retry"
+            : "Undo"}
+      </button>
+    </section>
+  );
+}
+
 export function App() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadAttempt, setLoadAttempt] = useState(0);
@@ -619,12 +743,17 @@ export function App() {
   );
   const [completionError, setCompletionError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
+  const [undoItems, setUndoItems] = useState<UndoItem[]>([]);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [editorDependencies, setEditorDependencies] =
     useState<EditorDependencies | null>(null);
   const [dependencyState, setDependencyState] =
     useState<DependencyState>("idle");
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const nextUndoIdRef = useRef(1);
+
+  const completionDisabledTaskIds = new Set(completingTaskIds);
+  for (const item of undoItems) completionDisabledTaskIds.add(item.taskId);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -684,24 +813,84 @@ export function App() {
     });
   }
 
-  async function handleComplete(task: TaskResponse) {
-    if (completingTaskIds.has(task.id)) return;
+  function focusCompletionControl(taskId: number) {
+    window.setTimeout(() => {
+      document
+        .querySelector<HTMLButtonElement>(
+          `[data-completion-task-id="${taskId}"]`,
+        )
+        ?.focus();
+    }, 0);
+  }
+
+  async function handleComplete(task: TaskResponse, shouldFocusUndo: boolean) {
+    if (completionDisabledTaskIds.has(task.id)) return;
     setCompletionError(null);
     setAnnouncement("");
     setCompletingTaskIds((current) => new Set(current).add(task.id));
+    reconcileTask(optimisticallyCompleteTask(task));
     try {
-      reconcileTask(await completeTask(task.id));
-      setAnnouncement(`Completed ${task.name}.`);
+      const result = await completeTask(task.id);
+      reconcileTask(result.task);
+      const undoItem: UndoItem = {
+        id: nextUndoIdRef.current++,
+        completionId: result.completion.id,
+        taskId: task.id,
+        taskName: task.name,
+        status: "available",
+        shouldFocus: shouldFocusUndo,
+      };
+      setUndoItems((current) => [...current, undoItem]);
+      setAnnouncement(
+        `Completed ${task.name}. Undo is available for five seconds.`,
+      );
     } catch {
+      reconcileTask(task);
       setCompletionError(
         `Couldn’t complete ${task.name}. Check your connection and try again.`,
       );
+      if (shouldFocusUndo) focusCompletionControl(task.id);
     } finally {
       setCompletingTaskIds((current) => {
         const next = new Set(current);
         next.delete(task.id);
         return next;
       });
+    }
+  }
+
+  function expireUndo(itemId: number) {
+    setUndoItems((current) => current.filter((item) => item.id !== itemId));
+  }
+
+  function setUndoStatus(itemId: number, status: UndoStatus) {
+    setUndoItems((current) =>
+      current.map((item) => (item.id === itemId ? { ...item, status } : item)),
+    );
+  }
+
+  async function handleUndo(item: UndoItem) {
+    setAnnouncement("");
+    setUndoStatus(item.id, "undoing");
+    try {
+      let task: TaskResponse;
+      try {
+        task = (await undoCompletion(item.completionId)).task;
+      } catch (error) {
+        if (!(error instanceof TaskApiError && error.status === 404)) {
+          throw error;
+        }
+        task = await fetchTask(item.taskId);
+      }
+      reconcileTask(task);
+      setUndoItems((current) =>
+        current.filter((candidate) => candidate.id !== item.id),
+      );
+      setAnnouncement(`Undid completion of ${item.taskName}.`);
+      focusCompletionControl(item.taskId);
+    } catch {
+      setUndoStatus(item.id, "failed");
+      setAnnouncement(`Couldn’t undo completion of ${item.taskName}.`);
     }
   }
 
@@ -752,7 +941,10 @@ export function App() {
               tasks={readyTasks}
               emptyMessage="Nothing is ready."
               completingTaskIds={completingTaskIds}
-              onComplete={(task) => void handleComplete(task)}
+              completionDisabledTaskIds={completionDisabledTaskIds}
+              onComplete={(task, shouldFocusUndo) =>
+                void handleComplete(task, shouldFocusUndo)
+              }
               onEdit={(task) => openEditor({ mode: "edit", task })}
             />
             <TaskSection
@@ -760,7 +952,10 @@ export function App() {
               tasks={upcomingTasks}
               emptyMessage="No upcoming tasks."
               completingTaskIds={completingTaskIds}
-              onComplete={(task) => void handleComplete(task)}
+              completionDisabledTaskIds={completionDisabledTaskIds}
+              onComplete={(task, shouldFocusUndo) =>
+                void handleComplete(task, shouldFocusUndo)
+              }
               onEdit={(task) => openEditor({ mode: "edit", task })}
             />
           </>
@@ -769,6 +964,19 @@ export function App() {
           {announcement}
         </p>
       </main>
+
+      {undoItems.length > 0 ? (
+        <aside className="undo-stack" aria-label="Completion actions">
+          {undoItems.map((item) => (
+            <UndoToast
+              key={item.id}
+              item={item}
+              onExpire={expireUndo}
+              onUndo={(selectedItem) => void handleUndo(selectedItem)}
+            />
+          ))}
+        </aside>
+      ) : null}
 
       <button
         type="button"

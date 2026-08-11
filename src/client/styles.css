@@ -207,6 +207,9 @@ summary:focus-visible {
 .completion-control:disabled span {
   border-color: #6b8e7e;
   background: #d9e9e0;
+}
+
+.completion-control[data-pending="true"] span {
   animation: completion-pulse 900ms ease-in-out infinite alternate;
 }
 
@@ -354,6 +357,80 @@ summary:focus-visible {
 
 .add-task-button:hover {
   background: #245b45;
+}
+
+.undo-stack {
+  position: fixed;
+  z-index: 3;
+  right: max(1rem, calc((100vw - 44rem) / 2 + 1rem));
+  bottom: max(5.25rem, calc(env(safe-area-inset-bottom) + 5.25rem));
+  display: grid;
+  width: min(calc(100vw - 2rem), 24rem);
+  gap: 0.65rem;
+}
+
+.undo-toast {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem 0.85rem 0.8rem 1rem;
+  border: 1px solid #3f554b;
+  border-radius: 0.85rem;
+  background: #24362e;
+  box-shadow: 0 0.75rem 2rem rgb(21 35 29 / 24%);
+  color: #fff;
+}
+
+.undo-toast > div {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.undo-toast p,
+.undo-toast span,
+.undo-toast small {
+  display: block;
+}
+
+.undo-toast p {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.undo-toast span {
+  margin-top: 0.15rem;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.undo-toast small {
+  margin-top: 0.25rem;
+  color: #f4ded3;
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.undo-toast button {
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+  min-height: 2.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #9eb8aa;
+  border-radius: 0.65rem;
+  background: #fff;
+  color: #275940;
+  cursor: pointer;
+  font-weight: 780;
+}
+
+.undo-toast-error {
+  border-color: #8a6858;
+  background: #513f36;
 }
 
 .task-dialog {
@@ -622,7 +699,7 @@ button:disabled {
     transition: none;
   }
 
-  .completion-control:disabled span {
+  .completion-control[data-pending="true"] span {
     animation: none;
   }
 

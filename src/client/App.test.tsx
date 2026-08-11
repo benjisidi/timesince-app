@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 
 import {
+  act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -44,13 +46,22 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
 describe("Task view", () => {
-  it("loads the ordered sections and moves a completed Ready task to Upcoming", async () => {
+  it("optimistically completes a Ready task and undoes its exact completion", async () => {
     const readyTask = task({ id: 1, name: "Hoover floor" });
     const upcomingTask = task({
       id: 2,
@@ -71,6 +82,7 @@ describe("Task view", () => {
       visibleInReady: false,
     });
 
+    const completionResponse = deferred<Response>();
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input, init) => {
@@ -82,6 +94,9 @@ describe("Task view", () => {
           return jsonResponse({ tasks: [upcomingTask] });
         }
         if (url === "/api/tasks/1/completions" && init?.method === "POST") {
+          return completionResponse.promise;
+        }
+        if (url === "/api/completions/10" && init?.method === "DELETE") {
           const body: CompletionMutationResponse = {
             completion: {
               id: 10,
@@ -89,9 +104,9 @@ describe("Task view", () => {
               completedAt: "2026-08-11T16:00:00.000Z",
               createdAt: "2026-08-11T16:00:00.000Z",
             },
-            task: completedTask,
+            task: readyTask,
           };
-          return jsonResponse(body, 201);
+          return jsonResponse(body);
         }
         return jsonResponse(
           { error: { code: "NOT_FOUND", message: "No" } },
@@ -113,14 +128,40 @@ describe("Task view", () => {
       }),
     );
 
-    await waitFor(() => {
-      expect(within(readySection).queryByText("Hoover floor")).toBeNull();
-      expect(within(upcomingSection).getByText("Hoover floor")).toBeTruthy();
-    });
+    expect(within(readySection).queryByText("Hoover floor")).toBeNull();
+    expect(within(upcomingSection).getByText("Hoover floor")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /Undo completion/ }),
+    ).toBeNull();
     const upcomingRows = within(upcomingSection).getAllByRole("listitem");
     expect(within(upcomingRows[0]!).getByText("Wash towels")).toBeTruthy();
     expect(within(upcomingRows[1]!).getByText("Hoover floor")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Ready 0 tasks" })).toBeTruthy();
+
+    completionResponse.resolve(
+      jsonResponse(
+        {
+          completion: {
+            id: 10,
+            taskId: 1,
+            completedAt: "2026-08-11T16:00:00.000Z",
+            createdAt: "2026-08-11T16:00:00.000Z",
+          },
+          task: completedTask,
+        } satisfies CompletionMutationResponse,
+        201,
+      ),
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", {
+        name: "Undo completion of Hoover floor",
+      }),
+    );
+    await waitFor(() => {
+      expect(within(readySection).getByText("Hoover floor")).toBeTruthy();
+      expect(within(upcomingSection).queryByText("Hoover floor")).toBeNull();
+    });
     expect(
       fetchMock.mock.calls.some(
         ([input, init]) =>
@@ -129,6 +170,242 @@ describe("Task view", () => {
           init.body === "{}",
       ),
     ).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input) === "/api/completions/10" && init?.method === "DELETE",
+      ),
+    ).toBe(true);
+  });
+
+  it("rolls back only the affected task when completion creation fails", async () => {
+    const firstTask = task({ id: 1, name: "Hoover floor" });
+    const secondTask = task({ id: 2, name: "Clean sink", elapsedDays: 15 });
+    const completionResponse = deferred<Response>();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("state=ready")) {
+        return jsonResponse({ tasks: [firstTask, secondTask] });
+      }
+      if (url.includes("state=sleeping")) return jsonResponse({ tasks: [] });
+      if (url === "/api/tasks/1/completions" && init?.method === "POST") {
+        return completionResponse.promise;
+      }
+      return jsonResponse({ error: { code: "NOT_FOUND", message: "No" } }, 404);
+    });
+
+    render(<App />);
+    const readySection = await screen.findByRole("region", { name: /Ready/ });
+    const upcomingSection = screen.getByRole("region", { name: /Upcoming/ });
+    await userEvent.click(
+      within(readySection).getByRole("button", {
+        name: "Complete Hoover floor",
+      }),
+    );
+
+    expect(within(readySection).queryByText("Hoover floor")).toBeNull();
+    expect(within(upcomingSection).getByText("Hoover floor")).toBeTruthy();
+
+    completionResponse.resolve(
+      jsonResponse(
+        { error: { code: "INTERNAL_ERROR", message: "Completion failed" } },
+        500,
+      ),
+    );
+
+    expect(
+      await screen.findByText(/Couldn’t complete Hoover floor/),
+    ).toBeTruthy();
+    expect(within(readySection).getByText("Hoover floor")).toBeTruthy();
+    expect(within(readySection).getByText("Clean sink")).toBeTruthy();
+    expect(within(upcomingSection).queryByText("Hoover floor")).toBeNull();
+    expect(screen.getByRole("heading", { name: "Ready 2 tasks" })).toBeTruthy();
+  });
+
+  it("keeps rapid completions independent and retains a failed Undo for retry", async () => {
+    const firstTask = task({ id: 1, name: "Hoover floor" });
+    const secondTask = task({
+      id: 2,
+      name: "Clean sink",
+      elapsedDays: 4,
+      overageDays: 0,
+      state: "sleeping",
+      visibleInReady: false,
+    });
+    const completedFirst = task({
+      ...firstTask,
+      lastCompletedAt: "2026-08-11T16:00:00.000Z",
+      elapsedDays: 0,
+      overageDays: 0,
+      state: "sleeping",
+      visibleInReady: false,
+    });
+    const completedSecond = task({
+      ...secondTask,
+      lastCompletedAt: "2026-08-11T16:00:01.000Z",
+      elapsedDays: 0,
+      overageDays: 0,
+      state: "sleeping",
+      visibleInReady: false,
+    });
+    let firstUndoAttempts = 0;
+    const completion = (id: number, taskId: number, completedAt: string) => ({
+      id,
+      taskId,
+      completedAt,
+      createdAt: completedAt,
+    });
+
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("state=ready")) {
+        return jsonResponse({ tasks: [firstTask] });
+      }
+      if (url.includes("state=sleeping")) {
+        return jsonResponse({ tasks: [secondTask] });
+      }
+      if (url === "/api/tasks/1/completions" && init?.method === "POST") {
+        return jsonResponse(
+          {
+            completion: completion(10, 1, "2026-08-11T16:00:00.000Z"),
+            task: completedFirst,
+          } satisfies CompletionMutationResponse,
+          201,
+        );
+      }
+      if (url === "/api/tasks/2/completions" && init?.method === "POST") {
+        return jsonResponse(
+          {
+            completion: completion(11, 2, "2026-08-11T16:00:01.000Z"),
+            task: completedSecond,
+          } satisfies CompletionMutationResponse,
+          201,
+        );
+      }
+      if (url === "/api/completions/10" && init?.method === "DELETE") {
+        firstUndoAttempts += 1;
+        if (firstUndoAttempts === 1) {
+          return jsonResponse(
+            { error: { code: "INTERNAL_ERROR", message: "Undo failed" } },
+            500,
+          );
+        }
+        return jsonResponse({
+          completion: completion(10, 1, "2026-08-11T16:00:00.000Z"),
+          task: firstTask,
+        } satisfies CompletionMutationResponse);
+      }
+      return jsonResponse({ error: { code: "NOT_FOUND", message: "No" } }, 404);
+    });
+
+    render(<App />);
+    const readySection = await screen.findByRole("region", { name: /Ready/ });
+    const upcomingSection = screen.getByRole("region", { name: /Upcoming/ });
+    await userEvent.click(
+      within(readySection).getByRole("button", {
+        name: "Complete Hoover floor",
+      }),
+    );
+    await userEvent.click(
+      within(upcomingSection).getByRole("button", {
+        name: "Complete Clean sink",
+      }),
+    );
+
+    const firstUndo = await screen.findByRole("button", {
+      name: "Undo completion of Hoover floor",
+    });
+    expect(
+      screen.getByRole("button", { name: "Undo completion of Clean sink" }),
+    ).toBeTruthy();
+    expect(
+      (
+        within(upcomingSection).getByRole("button", {
+          name: "Complete Hoover floor",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+
+    await userEvent.click(firstUndo);
+    const retry = await screen.findByRole("button", {
+      name: "Retry undo for Hoover floor",
+    });
+    expect(within(upcomingSection).getByText("Hoover floor")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Undo completion of Clean sink" }),
+    ).toBeTruthy();
+
+    await userEvent.click(retry);
+    await waitFor(() => {
+      expect(within(readySection).getByText("Hoover floor")).toBeTruthy();
+      expect(within(upcomingSection).queryByText("Hoover floor")).toBeNull();
+    });
+    expect(firstUndoAttempts).toBe(2);
+  });
+
+  it("expires Undo after five active seconds and pauses while hovered", async () => {
+    const readyTask = task({ id: 1, name: "Hoover floor" });
+    const completedTask = task({
+      ...readyTask,
+      lastCompletedAt: "2026-08-11T16:00:00.000Z",
+      elapsedDays: 0,
+      overageDays: 0,
+      state: "sleeping",
+      visibleInReady: false,
+    });
+    const completionResponse = deferred<Response>();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("state=ready")) {
+        return jsonResponse({ tasks: [readyTask] });
+      }
+      if (url.includes("state=sleeping")) return jsonResponse({ tasks: [] });
+      if (url === "/api/tasks/1/completions" && init?.method === "POST") {
+        return completionResponse.promise;
+      }
+      return jsonResponse({ error: { code: "NOT_FOUND", message: "No" } }, 404);
+    });
+
+    render(<App />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Complete Hoover floor" }),
+    );
+
+    vi.useFakeTimers();
+    await act(async () => {
+      completionResponse.resolve(
+        jsonResponse(
+          {
+            completion: {
+              id: 10,
+              taskId: 1,
+              completedAt: "2026-08-11T16:00:00.000Z",
+              createdAt: "2026-08-11T16:00:00.000Z",
+            },
+            task: completedTask,
+          } satisfies CompletionMutationResponse,
+          201,
+        ),
+      );
+      await completionResponse.promise;
+    });
+
+    const feedback = screen.getByRole("region", {
+      name: "Completion feedback for Hoover floor",
+    });
+    fireEvent.mouseEnter(feedback);
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(within(feedback).getByText("Hoover floor")).toBeTruthy();
+
+    fireEvent.mouseLeave(feedback);
+    act(() => vi.advanceTimersByTime(4_999));
+    expect(
+      screen.getByRole("button", { name: "Undo completion of Hoover floor" }),
+    ).toBeTruthy();
+    act(() => vi.advanceTimersByTime(1));
+    expect(
+      screen.queryByRole("button", { name: "Undo completion of Hoover floor" }),
+    ).toBeNull();
   });
 
   it("creates a categorized task with a previous completion date", async () => {

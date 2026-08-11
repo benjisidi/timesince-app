@@ -13,6 +13,7 @@ export class TaskApiError extends Error {
   constructor(
     message: string,
     readonly fields: Record<string, string> = {},
+    readonly status?: number,
   ) {
     super(message);
     this.name = "TaskApiError";
@@ -34,7 +35,7 @@ async function readJson<T>(response: Response): Promise<T> {
       // The status remains useful when the server does not return JSON.
     }
 
-    throw new TaskApiError(message, fields);
+    throw new TaskApiError(message, fields, response.status);
   }
 
   return (await response.json()) as T;
@@ -54,13 +55,29 @@ export async function fetchTaskView(signal: AbortSignal) {
   return { ready, upcoming };
 }
 
-export async function completeTask(taskId: number): Promise<TaskResponse> {
+export async function completeTask(
+  taskId: number,
+): Promise<CompletionMutationResponse> {
   const response = await fetch(`/api/tasks/${taskId}/completions`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: "{}",
   });
-  return (await readJson<CompletionMutationResponse>(response)).task;
+  return readJson<CompletionMutationResponse>(response);
+}
+
+export async function undoCompletion(
+  completionId: number,
+): Promise<CompletionMutationResponse> {
+  const response = await fetch(`/api/completions/${completionId}`, {
+    method: "DELETE",
+  });
+  return readJson<CompletionMutationResponse>(response);
+}
+
+export async function fetchTask(taskId: number): Promise<TaskResponse> {
+  const response = await fetch(`/api/tasks/${taskId}`);
+  return readJson<TaskResponse>(response);
 }
 
 export async function fetchEditorDependencies(signal?: AbortSignal) {

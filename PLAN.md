@@ -346,7 +346,13 @@ Validation errors should preserve entered form data and be clearly explained.
 
 # Milestone 7 — Completion undo
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-11. Task completion now reconciles optimistically in both
+Ready and Upcoming, retains each server-created completion ID for an
+independent five-second Undo action, rolls back failed creation, and keeps
+failed Undo available for retry. Focused frontend tests cover the critical
+state transitions and exact-ID requests.
 
 ## Goal
 
