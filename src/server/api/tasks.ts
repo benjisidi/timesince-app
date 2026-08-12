@@ -326,7 +326,11 @@ export function createTaskRouter(options: CreateTaskRouterOptions) {
     const now = clock();
     const taskId = parseId(request.params.taskId, "taskId");
     await getActiveTask(taskId);
-    const input = parseCreateCompletionBody(request.body, now);
+    const input = parseCreateCompletionBody(
+      request.body,
+      now,
+      options.timeZone,
+    );
     const completion = await completions.create({
       taskId,
       completedAt: input.completedAt ?? now,

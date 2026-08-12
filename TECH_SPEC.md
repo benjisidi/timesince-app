@@ -338,7 +338,13 @@ DELETE /api/completions/:id
 `POST` records a completion.
 
 It may include an optional past `completedAt` instant and otherwise records the
-current time. Future completion instants are rejected at the API boundary.
+current time. Existing ISO-8601 instant inputs remain supported. It also accepts
+a `YYYY-MM-DD` value for historical completion, resolves that date to the start
+of the local calendar day in the configured application timezone, and stores
+the resulting UTC instant. Date-only completion input must be strictly before
+today in that timezone; today uses the normal current-time completion path and
+future dates are rejected. Multiple completions on the same local calendar
+date remain independent records.
 
 Deleting the newest completion supports the Undo workflow.
 
@@ -453,6 +459,12 @@ Preferred flow:
 5. on failure, restore the previous UI and report the error.
 
 Undo deletes the completion that was just created.
+
+Historical completion is a secondary task-editor workflow. It does not apply
+an optimistic derived-state update because an inserted event may be older than
+the current latest completion. After creation, the frontend reconciles the
+authoritative task returned by the server through the same Ready, Sleeping,
+Browse, and Search collection path and offers the existing exact-ID Undo.
 
 ### Responsive layout
 

@@ -64,6 +64,30 @@ describe("task collection reconciliation", () => {
     expect(result.searchTasks).toEqual([completedTask]);
   });
 
+  it("reconciles an authoritative historical completion across every loaded active collection", () => {
+    const readyTask = task({ id: 1, name: "Clean oven" });
+    const historicalTask = task({
+      ...readyTask,
+      lastCompletedAt: "2026-08-05T23:00:00.000Z",
+      elapsedDays: 6,
+      overageDays: 0,
+      state: "sleeping",
+      snoozedUntil: "2026-08-20T23:00:00.000Z",
+      isSnoozed: true,
+      visibleInReady: false,
+    });
+
+    const result = taskCollectionsReducer(loadedState([readyTask]), {
+      type: "reconcile-task",
+      task: historicalTask,
+    });
+
+    expect(result.readyTasks).toEqual([]);
+    expect(result.sleepingTasks).toEqual([historicalTask]);
+    expect(result.browseTasks).toEqual([historicalTask]);
+    expect(result.searchTasks).toEqual([historicalTask]);
+  });
+
   it("does not populate Browse or Search before those collections load", () => {
     const readyTask = task({ id: 1, name: "Clean oven" });
     const result = taskCollectionsReducer(initialTaskCollectionsState, {

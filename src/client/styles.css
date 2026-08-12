@@ -1049,6 +1049,10 @@ a:focus-visible {
   bottom: max(1rem, env(safe-area-inset-bottom));
 }
 
+.task-dialog .undo-stack {
+  bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
 .dialog-panel {
   max-height: min(92dvh, 48rem);
   padding: 1.25rem 1rem max(1.25rem, env(safe-area-inset-bottom));
@@ -1236,23 +1240,47 @@ a:focus-visible {
 }
 
 .last-done-context {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
   color: #40544a;
   font-size: 0.84rem;
 }
 
-.last-done-context span {
+.last-done-summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.last-done-summary span {
   font-weight: 750;
 }
 
-.last-done-context strong {
+.last-done-summary strong {
   color: #68786f;
   font-size: 0.8rem;
   font-weight: 650;
   text-align: right;
+}
+
+.done-earlier-trigger {
+  justify-self: start;
+}
+
+.historical-completion-fields {
+  display: grid;
+  gap: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #e0e6e1;
+}
+
+.historical-completion-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
 }
 
 .snooze-fields h3 {

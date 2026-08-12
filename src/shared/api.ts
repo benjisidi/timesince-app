@@ -76,6 +76,10 @@ export interface CompletionResponse {
   createdAt: string;
 }
 
+export interface CreateCompletionRequest {
+  completedAt?: string;
+}
+
 export interface TaskListResponse {
   tasks: TaskResponse[];
 }

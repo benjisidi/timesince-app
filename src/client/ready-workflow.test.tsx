@@ -385,6 +385,170 @@ describe("Ready view", () => {
     ).toBeNull();
   });
 
+  it("records a historical completion from the editor and undoes its exact ID", async () => {
+    const readyTask = task({ id: 1, name: "Hoover floor" });
+    const historicalTask = task({
+      ...readyTask,
+      lastCompletedAt: "2026-08-04T23:00:00.000Z",
+      elapsedDays: 7,
+      overageDays: 0,
+      state: "sleeping",
+      visibleInReady: false,
+    });
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input, init) => {
+        const url = String(input);
+        if (url.includes("state=ready")) {
+          return jsonResponse({ tasks: [readyTask] });
+        }
+        if (url.includes("state=sleeping")) {
+          return jsonResponse({ tasks: [] });
+        }
+        if (url === "/api/categories") {
+          return jsonResponse({
+            categories: [{ id: 1, name: "Kitchen", position: 0 }],
+          });
+        }
+        if (url === "/api/config") {
+          return jsonResponse({ timeZone: "Europe/London" });
+        }
+        if (url === "/api/tasks/1/completions" && init?.method === "POST") {
+          return jsonResponse(
+            {
+              completion: {
+                id: 77,
+                taskId: 1,
+                completedAt: "2026-08-04T23:00:00.000Z",
+                createdAt: "2026-08-12T12:00:00.000Z",
+              },
+              task: historicalTask,
+            } satisfies CompletionMutationResponse,
+            201,
+          );
+        }
+        if (url === "/api/completions/77" && init?.method === "DELETE") {
+          return jsonResponse({
+            completion: {
+              id: 77,
+              taskId: 1,
+              completedAt: "2026-08-04T23:00:00.000Z",
+              createdAt: "2026-08-12T12:00:00.000Z",
+            },
+            task: readyTask,
+          } satisfies CompletionMutationResponse);
+        }
+        return jsonResponse(
+          { error: { code: "NOT_FOUND", message: "No" } },
+          404,
+        );
+      });
+
+    renderApp();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Edit Hoover floor" }),
+    );
+    await screen.findByText("Dates use Europe/London.");
+    const nameInput = screen.getByLabelText("Name") as HTMLInputElement;
+    await userEvent.clear(nameInput);
+    await userEvent.type(nameInput, "Unsaved task name");
+    await userEvent.click(screen.getByRole("button", { name: "Done earlier" }));
+    await userEvent.type(screen.getByLabelText("Done on"), "2026-08-05");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Record completion" }),
+    );
+
+    const editor = screen.getByRole("dialog", { name: "Edit task" });
+    expect(
+      within(editor).getByText(/^(?:5 August|August 5),? 2026$/),
+    ).toBeTruthy();
+    expect(
+      within(editor).getByText(
+        /^Recorded as done on (?:5 August|August 5),? 2026$/,
+      ),
+    ).toBeTruthy();
+    expect(nameInput.value).toBe("Unsaved task name");
+    expect(
+      JSON.parse(
+        String(
+          fetchMock.mock.calls.find(
+            ([input, init]) =>
+              String(input) === "/api/tasks/1/completions" &&
+              init?.method === "POST",
+          )?.[1]?.body,
+        ),
+      ),
+    ).toEqual({ completedAt: "2026-08-05" });
+
+    await userEvent.click(
+      within(editor).getByRole("button", {
+        name: "Undo completion of Hoover floor",
+      }),
+    );
+    await waitFor(() =>
+      expect(
+        within(editor).getByText(/^(?:25 July|July 25),? 2026$/),
+      ).toBeTruthy(),
+    );
+    expect(nameInput.value).toBe("Unsaved task name");
+    expect(
+      fetchMock.mock.calls.some(
+        ([input, init]) =>
+          String(input) === "/api/completions/77" && init?.method === "DELETE",
+      ),
+    ).toBe(true);
+  });
+
+  it("preserves the entered historical date after an API failure", async () => {
+    const readyTask = task({ id: 1, name: "Hoover floor" });
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.includes("state=ready")) {
+        return jsonResponse({ tasks: [readyTask] });
+      }
+      if (url.includes("state=sleeping")) return jsonResponse({ tasks: [] });
+      if (url === "/api/categories") {
+        return jsonResponse({
+          categories: [{ id: 1, name: "Kitchen", position: 0 }],
+        });
+      }
+      if (url === "/api/config") {
+        return jsonResponse({ timeZone: "Europe/London" });
+      }
+      if (url === "/api/tasks/1/completions" && init?.method === "POST") {
+        return jsonResponse(
+          {
+            error: {
+              code: "INVALID_REQUEST",
+              message: "Couldn’t record completion",
+              fields: { completedAt: "Choose a different earlier date" },
+            },
+          },
+          400,
+        );
+      }
+      return jsonResponse({ error: { code: "NOT_FOUND", message: "No" } }, 404);
+    });
+
+    renderApp();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Edit Hoover floor" }),
+    );
+    await screen.findByText("Dates use Europe/London.");
+    await userEvent.click(screen.getByRole("button", { name: "Done earlier" }));
+    const dateInput = screen.getByLabelText("Done on") as HTMLInputElement;
+    await userEvent.type(dateInput, "2026-08-05");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Record completion" }),
+    );
+
+    expect(
+      await screen.findByText("Choose a different earlier date"),
+    ).toBeTruthy();
+    expect(dateInput.value).toBe("2026-08-05");
+    expect(screen.getByRole("dialog", { name: "Edit task" })).toBeTruthy();
+  });
+
   it("creates a categorized task with a previous completion date", async () => {
     const createdTask = task({
       id: 3,

@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { CategoryResponse, TaskResponse } from "../../../shared/api";
 import { TaskApiError } from "../../api/client";
 import { archiveTask, createTask, updateTask } from "../../api/tasks";
+import { UndoStack, type UndoItem } from "../completion/UndoStack";
 
 export type EditorState =
   { mode: "create" } | { mode: "edit"; task: TaskResponse };
@@ -50,6 +51,16 @@ function formatTaskDate(timestamp: string, timeZone: string) {
   }).format(new Date(timestamp));
 }
 
+function formatDateOnly(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year as number, (month as number) - 1, day)));
+}
+
 interface TaskEditorProps {
   editor: EditorState;
   dependencies: EditorDependencies | null;
@@ -62,6 +73,16 @@ interface TaskEditorProps {
     keepOpen?: boolean,
   ) => void;
   onArchived: (task: TaskResponse) => void;
+  historicalCompletionDisabled: boolean;
+  undoItems: UndoItem[];
+  onCompletedEarlier: (
+    task: TaskResponse,
+    completedAt: string,
+    formattedDate: string,
+    shouldFocusUndo: boolean,
+  ) => Promise<TaskResponse>;
+  onExpireUndo: (itemId: number) => void;
+  onUndo: (item: UndoItem) => void;
 }
 
 export function TaskEditor({
@@ -72,9 +93,15 @@ export function TaskEditor({
   onClose,
   onSaved,
   onArchived,
+  historicalCompletionDisabled,
+  undoItems,
+  onCompletedEarlier,
+  onExpireUndo,
+  onUndo,
 }: TaskEditorProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const historicalShouldFocusUndoRef = useRef(false);
   const task = editor.mode === "edit" ? editor.task : null;
   const [draft, setDraft] = useState<TaskDraft>({
     name: task?.name ?? "",
@@ -89,6 +116,13 @@ export function TaskEditor({
   const [isArchiving, setIsArchiving] = useState(false);
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [createAnother, setCreateAnother] = useState(false);
+  const [showHistoricalCompletion, setShowHistoricalCompletion] =
+    useState(false);
+  const [historicalCompletedAt, setHistoricalCompletedAt] = useState("");
+  const [historicalCompletionError, setHistoricalCompletionError] = useState<
+    string | null
+  >(null);
+  const [isRecordingEarlier, setIsRecordingEarlier] = useState(false);
   const [openedAt] = useState(() => new Date());
 
   useEffect(() => {
@@ -217,7 +251,51 @@ export function TaskEditor({
     }
   }
 
-  const isBusy = isSaving || isArchiving;
+  async function handleHistoricalCompletion(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!task || !dependencies || historicalCompletionDisabled) return;
+
+    const localToday = dateInTimeZone(new Date(), dependencies.timeZone);
+    if (!historicalCompletedAt) {
+      setHistoricalCompletionError("Choose an earlier date.");
+      return;
+    }
+    if (historicalCompletedAt === localToday) {
+      setHistoricalCompletionError(
+        "Choose a date before today, or use Done now.",
+      );
+      return;
+    }
+    if (historicalCompletedAt > localToday) {
+      setHistoricalCompletionError("Choose a date before today.");
+      return;
+    }
+
+    const shouldFocusUndo = historicalShouldFocusUndoRef.current;
+    historicalShouldFocusUndoRef.current = false;
+    setHistoricalCompletionError(null);
+    setIsRecordingEarlier(true);
+    try {
+      await onCompletedEarlier(
+        task,
+        historicalCompletedAt,
+        formatDateOnly(historicalCompletedAt),
+        shouldFocusUndo,
+      );
+      setHistoricalCompletedAt("");
+      setShowHistoricalCompletion(false);
+    } catch (error) {
+      setHistoricalCompletionError(
+        error instanceof TaskApiError
+          ? (error.fields.completedAt ?? error.message)
+          : "Couldn’t record that completion. Check your connection and try again.",
+      );
+    } finally {
+      setIsRecordingEarlier(false);
+    }
+  }
+
+  const isBusy = isSaving || isArchiving || isRecordingEarlier;
   const heading = editor.mode === "create" ? "Create task" : "Edit task";
   const lastCompleted =
     task && dependencies
@@ -228,6 +306,7 @@ export function TaskEditor({
   const today = dependencies
     ? dateInTimeZone(openedAt, dependencies.timeZone)
     : null;
+  const latestHistoricalDate = today ? addCalendarDays(today, -1) : null;
   const snoozedUntil =
     draft.snoozedUntil ??
     (task?.snoozedUntil && dependencies
@@ -266,6 +345,100 @@ export function TaskEditor({
             ×
           </button>
         </div>
+
+        {task ? (
+          <section
+            className="last-done-context"
+            aria-labelledby="last-done-heading"
+          >
+            <div className="last-done-summary">
+              <span id="last-done-heading">Last done</span>
+              <strong>{lastCompleted ?? "Loading…"}</strong>
+            </div>
+            <button
+              type="button"
+              className="text-button done-earlier-trigger"
+              aria-expanded={showHistoricalCompletion}
+              aria-controls="historical-completion-fields"
+              onClick={() => {
+                setShowHistoricalCompletion((current) => !current);
+                setHistoricalCompletionError(null);
+              }}
+              disabled={
+                isBusy ||
+                historicalCompletionDisabled ||
+                dependencyState !== "ready"
+              }
+            >
+              Done earlier
+            </button>
+            {showHistoricalCompletion ? (
+              <form
+                id="historical-completion-fields"
+                className="historical-completion-fields"
+                onSubmit={(event) => void handleHistoricalCompletion(event)}
+                noValidate
+              >
+                <label className="form-field">
+                  <span>Done on</span>
+                  <input
+                    type="date"
+                    value={historicalCompletedAt}
+                    max={latestHistoricalDate ?? undefined}
+                    onChange={(event) => {
+                      setHistoricalCompletedAt(event.target.value);
+                      setHistoricalCompletionError(null);
+                    }}
+                    aria-invalid={Boolean(historicalCompletionError)}
+                    aria-describedby={
+                      historicalCompletionError
+                        ? "historical-completion-error"
+                        : "date-timezone-help"
+                    }
+                    disabled={
+                      isBusy ||
+                      historicalCompletionDisabled ||
+                      dependencyState !== "ready"
+                    }
+                    required
+                  />
+                  {historicalCompletionError ? (
+                    <small id="historical-completion-error" role="alert">
+                      {historicalCompletionError}
+                    </small>
+                  ) : null}
+                </label>
+                <div className="historical-completion-actions">
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => {
+                      setShowHistoricalCompletion(false);
+                      setHistoricalCompletionError(null);
+                    }}
+                    disabled={isBusy}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="secondary-button"
+                    disabled={
+                      isBusy ||
+                      historicalCompletionDisabled ||
+                      dependencyState !== "ready"
+                    }
+                    onClick={(event) => {
+                      historicalShouldFocusUndoRef.current = event.detail === 0;
+                    }}
+                  >
+                    {isRecordingEarlier ? "Recording…" : "Record completion"}
+                  </button>
+                </div>
+              </form>
+            ) : null}
+          </section>
+        ) : null}
 
         <form onSubmit={(event) => void handleSubmit(event)} noValidate>
           {formError ? (
@@ -378,10 +551,6 @@ export function TaskEditor({
             </details>
           ) : (
             <div className="edit-task-context">
-              <div className="last-done-context">
-                <span>Last done</span>
-                <strong>{lastCompleted ?? "Loading…"}</strong>
-              </div>
               <section
                 className="snooze-fields"
                 aria-labelledby="snooze-heading"
@@ -508,6 +677,7 @@ export function TaskEditor({
           </div>
         ) : null}
       </div>
+      <UndoStack items={undoItems} onExpire={onExpireUndo} onUndo={onUndo} />
     </dialog>
   );
 }

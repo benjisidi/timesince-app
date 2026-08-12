@@ -334,6 +334,13 @@ describe("task API", () => {
         .status,
     ).toBe(409);
     expect(
+      (
+        await api
+          .post(`/api/tasks/${created.body.id}/completions`)
+          .send({ completedAt: "2026-08-01" })
+      ).status,
+    ).toBe(409);
+    expect(
       (await api.delete(`/api/completions/${completion.body.completion.id}`))
         .status,
     ).toBe(409);
@@ -413,6 +420,82 @@ describe("task API", () => {
     ).toBe(404);
   });
 
+  it("appends earlier, later, and same-date historical completions without rewriting history", async () => {
+    const { api } = await setup();
+    const task = await api.post("/api/tasks").send({
+      name: "Descale kettle",
+      targetIntervalDays: 14,
+    });
+    const existing = await api
+      .post(`/api/tasks/${task.body.id}/completions`)
+      .send({ completedAt: "2026-07-20T08:00:00.000Z" });
+
+    const earlier = await api
+      .post(`/api/tasks/${task.body.id}/completions`)
+      .send({ completedAt: "2026-07-01" });
+    expect(earlier.status).toBe(201);
+    expect(earlier.body).toMatchObject({
+      completion: { completedAt: "2026-06-30T23:00:00.000Z" },
+      task: { lastCompletedAt: existing.body.completion.completedAt },
+    });
+
+    const later = await api
+      .post(`/api/tasks/${task.body.id}/completions`)
+      .send({ completedAt: "2026-08-01" });
+    expect(later.body).toMatchObject({
+      completion: { completedAt: "2026-07-31T23:00:00.000Z" },
+      task: {
+        lastCompletedAt: "2026-07-31T23:00:00.000Z",
+        elapsedDays: 10,
+        state: "sleeping",
+      },
+    });
+
+    const sameDate = await api
+      .post(`/api/tasks/${task.body.id}/completions`)
+      .send({ completedAt: "2026-08-01" });
+    expect(sameDate.status).toBe(201);
+    expect(sameDate.body.completion.id).not.toBe(later.body.completion.id);
+    expect(sameDate.body.completion.completedAt).toBe(
+      later.body.completion.completedAt,
+    );
+
+    const undoSameDate = await api.delete(
+      `/api/completions/${sameDate.body.completion.id}`,
+    );
+    expect(undoSameDate.status).toBe(200);
+    expect(undoSameDate.body).toMatchObject({
+      completion: { id: sameDate.body.completion.id },
+      task: { lastCompletedAt: later.body.completion.completedAt },
+    });
+    const history = await api.get(`/api/tasks/${task.body.id}/completions`);
+    expect(
+      history.body.completions.map(({ id }: { id: number }) => id),
+    ).toEqual([
+      later.body.completion.id,
+      existing.body.completion.id,
+      earlier.body.completion.id,
+    ]);
+  });
+
+  it("resolves a historical completion at the configured timezone's calendar-day boundary", async () => {
+    const { api } = await setup("2026-10-26T12:00:00.000Z");
+    const task = await api.post("/api/tasks").send({
+      name: "Check smoke alarm",
+      targetIntervalDays: 30,
+    });
+
+    const completion = await api
+      .post(`/api/tasks/${task.body.id}/completions`)
+      .send({ completedAt: "2026-10-25" });
+
+    expect(completion.status).toBe(201);
+    expect(completion.body).toMatchObject({
+      completion: { completedAt: "2026-10-24T23:00:00.000Z" },
+      task: { elapsedDays: 1, state: "sleeping" },
+    });
+  });
+
   it("validates write payloads, references, IDs, queries, and timestamps", async () => {
     const { api } = await setup();
 
@@ -455,6 +538,22 @@ describe("task API", () => {
         await api.post(`/api/tasks/${task.body.id}/completions`).send({
           completedAt: "2026-08-12T12:00:00.000Z",
         })
+      ).status,
+    ).toBe(400);
+    const todayCompletion = await api
+      .post(`/api/tasks/${task.body.id}/completions`)
+      .send({ completedAt: "2026-08-11" });
+    expect(todayCompletion.status).toBe(400);
+    expect(todayCompletion.body.error).toMatchObject({
+      fields: {
+        completedAt: "Choose a date before today, or use Done now",
+      },
+    });
+    expect(
+      (
+        await api
+          .post(`/api/tasks/${task.body.id}/completions`)
+          .send({ completedAt: "2026-08-12" })
       ).status,
     ).toBe(400);
     expect(

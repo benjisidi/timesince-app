@@ -39,7 +39,12 @@ A task has a **target interval**, not a deadline.
 
 ### 2.2 Completion resets the clock
 
-Completing a task records a completion event at the current time.
+The normal one-tap completion action records a completion event at the current
+time.
+
+When correcting a forgotten completion, the user may instead record that the
+task was done on an earlier local calendar date. This creates another normal
+completion event and does not rewrite existing history.
 
 The task then sleeps for its configured target interval before returning to the main "Ready" list.
 
@@ -167,6 +172,11 @@ When creating a task, the user may optionally provide a previous completion date
 Previous-completion and snooze controls use local calendar dates in the
 application's configured timezone. A selected date represents the start of
 that calendar day in that timezone.
+
+For an existing active task, **Done earlier** accepts a date strictly before
+today in the configured timezone. Today remains the one-tap **Done now** path,
+and future dates are not valid completion input. Multiple completion records
+on the same local calendar date remain independent events.
 
 ---
 
@@ -325,6 +335,14 @@ On activation:
 
 Tapping/clicking the task name or row body should open task details/editing without marking it complete.
 
+### Done earlier
+
+The task editor provides a secondary **Done earlier** action beside the latest
+completion context. It records a normal completion on a previous local
+calendar date without changing the task's target interval, snooze, category,
+or existing completion records. The normal row-level **Done now** action
+remains the dominant completion workflow.
+
 ### Snooze
 
 The user may temporarily hide a Ready task until a chosen date.
@@ -388,6 +406,7 @@ v1 includes:
 - category management;
 - completion history;
 - mark complete + undo;
+- historical completion on a previous local calendar date;
 - target interval in whole days;
 - elapsed/over-target display;
 - snooze/ignore-until;

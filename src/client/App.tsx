@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 
 import type { CategoryResponse, TaskResponse } from "../shared/api";
@@ -79,6 +79,20 @@ export function App() {
     useState<DependencyState>("idle");
   const [archivedLoadAttempt, setArchivedLoadAttempt] = useState(0);
   const [announcement, setAnnouncement] = useState("");
+  const [editor, setEditor] = useState<EditorState | null>(null);
+
+  const reconcileActiveTask = useCallback(
+    (task: TaskResponse) => {
+      reconcileTask(task);
+      setEditor((current) =>
+        current?.mode === "edit" && current.task.id === task.id
+          ? { mode: "edit", task }
+          : current,
+      );
+    },
+    [reconcileTask],
+  );
+
   const {
     completingTaskIds,
     completionDisabledTaskIds,
@@ -86,10 +100,11 @@ export function App() {
     undoItems,
     clearCompletionError,
     handleComplete,
+    handleCompleteEarlier,
     expireUndo,
     handleUndo,
   } = useCompletionWorkflow({
-    reconcileTask,
+    reconcileTask: reconcileActiveTask,
     announce: setAnnouncement,
   });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -97,7 +112,6 @@ export function App() {
   const [searchLoadState, setSearchLoadState] =
     useState<DependencyState>("idle");
   const [searchLoadAttempt, setSearchLoadAttempt] = useState(0);
-  const [editor, setEditor] = useState<EditorState | null>(null);
   const [archivedDetails, setArchivedDetails] = useState<TaskResponse | null>(
     null,
   );
@@ -483,7 +497,7 @@ export function App() {
         {announcement}
       </p>
 
-      {!isSearchOpen ? (
+      {!isSearchOpen && !editor ? (
         <UndoStack
           items={undoItems}
           onExpire={expireUndo}
@@ -544,6 +558,15 @@ export function App() {
             setAnnouncement(`Archived ${task.name}.`);
             closeEditor();
           }}
+          historicalCompletionDisabled={completionDisabledTaskIds.has(
+            editor.mode === "edit" ? editor.task.id : -1,
+          )}
+          undoItems={undoItems}
+          onCompletedEarlier={(task, completedAt, formattedDate, shouldFocus) =>
+            handleCompleteEarlier(task, completedAt, formattedDate, shouldFocus)
+          }
+          onExpireUndo={expireUndo}
+          onUndo={(item) => void handleUndo(item)}
         />
       ) : null}
 

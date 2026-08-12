@@ -66,6 +66,7 @@ export function useCompletionWorkflow({
           completionId: result.completion.id,
           taskId: task.id,
           taskName: task.name,
+          feedback: "Completed",
           status: "available",
           shouldFocus: shouldFocusUndo,
         };
@@ -91,6 +92,48 @@ export function useCompletionWorkflow({
   const expireUndo = useCallback((itemId: number) => {
     setUndoItems((current) => current.filter((item) => item.id !== itemId));
   }, []);
+
+  const handleCompleteEarlier = useCallback(
+    async (
+      task: TaskResponse,
+      completedAt: string,
+      formattedDate: string,
+      shouldFocusUndo: boolean,
+    ) => {
+      if (completionDisabledTaskIds.has(task.id)) {
+        throw new Error("A completion action is already pending for this task");
+      }
+
+      setCompletionError(null);
+      announce("");
+      setCompletingTaskIds((current) => new Set(current).add(task.id));
+      try {
+        const result = await completeTask(task.id, { completedAt });
+        reconcileTask(result.task);
+        const undoItem: UndoItem = {
+          id: nextUndoIdRef.current++,
+          completionId: result.completion.id,
+          taskId: task.id,
+          taskName: task.name,
+          feedback: `Recorded as done on ${formattedDate}`,
+          status: "available",
+          shouldFocus: shouldFocusUndo,
+        };
+        setUndoItems((current) => [...current, undoItem]);
+        announce(
+          `Recorded ${task.name} as done on ${formattedDate}. Undo is available for five seconds.`,
+        );
+        return result.task;
+      } finally {
+        setCompletingTaskIds((current) => {
+          const next = new Set(current);
+          next.delete(task.id);
+          return next;
+        });
+      }
+    },
+    [announce, completionDisabledTaskIds, reconcileTask],
+  );
 
   const setUndoStatus = useCallback((itemId: number, status: UndoStatus) => {
     setUndoItems((current) =>
@@ -133,6 +176,7 @@ export function useCompletionWorkflow({
     undoItems,
     clearCompletionError,
     handleComplete,
+    handleCompleteEarlier,
     expireUndo,
     handleUndo,
   };

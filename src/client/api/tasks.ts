@@ -1,5 +1,6 @@
 import type {
   CompletionMutationResponse,
+  CreateCompletionRequest,
   CreateTaskRequest,
   TaskListResponse,
   TaskResponse,
@@ -33,11 +34,12 @@ export async function fetchArchivedTasks(signal: AbortSignal) {
 
 export async function completeTask(
   taskId: number,
+  input: CreateCompletionRequest = {},
 ): Promise<CompletionMutationResponse> {
   const response = await apiFetch(`/api/tasks/${taskId}/completions`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: "{}",
+    body: JSON.stringify(input),
   });
   return readJson<CompletionMutationResponse>(response);
 }

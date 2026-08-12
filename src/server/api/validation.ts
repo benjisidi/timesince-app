@@ -298,6 +298,7 @@ export function parseUpdateTaskBody(
 export function parseCreateCompletionBody(
   body: unknown,
   now: Date,
+  timeZone: string,
 ): CreateCompletionBody {
   const value = asObject(body);
   assertAllowedKeys(value, ["completedAt"]);
@@ -306,7 +307,30 @@ export function parseCreateCompletionBody(
     return {};
   }
 
-  const completedAt = parseTimestamp(value.completedAt, "completedAt");
+  const isDateOnly =
+    typeof value.completedAt === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(value.completedAt);
+  const completedAt = parseDateOrTimestamp(
+    value.completedAt,
+    "completedAt",
+    timeZone,
+  );
+
+  if (isDateOnly) {
+    const selectedDate = value.completedAt as string;
+    const today = localDateKey(now, timeZone);
+    if (selectedDate === today) {
+      invalidRequest("Use Done now to record a completion today", {
+        completedAt: "Choose a date before today, or use Done now",
+      });
+    }
+    if (selectedDate > today) {
+      invalidRequest("completedAt must be before today", {
+        completedAt: "Choose a date before today",
+      });
+    }
+  }
+
   assertNotFuture(completedAt, now, "completedAt");
   return { completedAt };
 }

@@ -1201,7 +1201,16 @@ Do not add permanent deletion unless separately specified.
 
 # Milestone 17 — Historical completion ("Done earlier")
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-12. Active task editors now provide a secondary Done earlier
+flow using a configured-timezone `YYYY-MM-DD` value restricted to dates before
+today. The completion API remains compatible with ISO instants, appends normal
+history records, returns authoritative derived task state for central
+Ready/Sleeping/Browse/Search reconciliation, and reuses exact-ID Undo with
+historical feedback while preserving unsaved editor fields. Focused API,
+reducer, and frontend tests cover timezone boundaries, date validation,
+history ordering, archived-task rejection, failure preservation, and Undo.
 
 ## Goal
 

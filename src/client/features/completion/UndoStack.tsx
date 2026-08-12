@@ -7,6 +7,7 @@ export interface UndoItem {
   completionId: number;
   taskId: number;
   taskName: string;
+  feedback: string;
   status: UndoStatus;
   shouldFocus: boolean;
 }
@@ -69,7 +70,7 @@ function UndoToast({ item, onExpire, onUndo }: UndoToastProps) {
       }}
     >
       <div>
-        <p>{item.status === "failed" ? "Undo failed" : "Completed"}</p>
+        <p>{item.status === "failed" ? "Undo failed" : item.feedback}</p>
         <span>{item.taskName}</span>
         {item.status === "failed" ? (
           <small role="alert">Check your connection and try again.</small>
