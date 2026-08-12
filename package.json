@@ -12,9 +12,9 @@
     "dev:client": "vite --host 0.0.0.0",
     "dev:server": "node --env-file-if-exists=.env --import tsx --watch src/server/index.ts",
     "build": "npm run build:client && npm run build:server",
-    "build:client": "vite build",
+    "build:client": "vite build && node scripts/verify-pwa-build.js",
     "build:server": "node esbuild.config.js",
-    "start": "node --env-file-if-exists=.env dist/server/index.js",
+    "start": "NODE_ENV=production node --env-file-if-exists=.env dist/server/index.js",
     "db:migrate": "node --env-file-if-exists=.env --import tsx scripts/migrate.ts",
     "db:migrate:prod": "node --env-file-if-exists=.env dist/server/migrate.js",
     "db:reset:dev": "node --env-file-if-exists=.env --import tsx scripts/reset-development-database.ts",
@@ -63,6 +63,7 @@
     "typescript": "npm:@typescript/typescript6@6.0.2",
     "typescript-eslint": "8.67.0",
     "vite": "8.2.1",
+    "vite-plugin-pwa": "^1.3.0",
     "vitest": "4.1.10"
   }
 }

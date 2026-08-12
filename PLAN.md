@@ -550,7 +550,15 @@ Avoid adding complexity without demonstrated value.
 
 # Milestone 12 — PWA support
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-11. TimeSince now builds an installable standalone PWA with
+standard and maskable branding, a generated Workbox service worker limited to
+the versioned application shell/static assets, explicit API cache exclusion,
+clear offline/backend-unavailable behaviour, and a user-controlled update
+prompt. Browser connectivity remains a wording/retry hint; failed API requests
+authoritatively drive backend-unavailable state and no task data or mutations
+are cached or queued offline.
 
 ## Goal
 

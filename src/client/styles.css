@@ -41,10 +41,63 @@ a:focus-visible {
 
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .app-content {
   min-width: 0;
+}
+
+.app-status-stack {
+  position: sticky;
+  z-index: 3;
+  top: 0;
+  display: grid;
+  width: min(100%, 44rem);
+  gap: 0.5rem;
+  margin-inline: auto;
+  padding: 0.65rem 1rem 0;
+}
+
+.app-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #aebdb3;
+  border-radius: 0.75rem;
+  background: #f7faf7;
+  box-shadow: 0 0.45rem 1.2rem rgb(36 49 44 / 10%);
+  color: #30483d;
+  font-size: 0.82rem;
+}
+
+.app-status p {
+  margin: 0;
+}
+
+.app-status-update {
+  border-color: #7ea18f;
+  background: #e7eee9;
+}
+
+.app-status-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.4rem;
+}
+
+.app-status button {
+  min-height: 2.25rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid #87a294;
+  border-radius: 0.55rem;
+  background: #fff;
+  color: #245b45;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 750;
 }
 
 .app-header {
@@ -64,7 +117,7 @@ a:focus-visible {
   align-items: center;
   justify-content: space-between;
   min-height: 4.25rem;
-  padding: 0.875rem 1rem;
+  padding: calc(0.875rem + env(safe-area-inset-top)) 1rem 0.875rem;
 }
 
 .app-brand {
@@ -183,7 +236,7 @@ a:focus-visible {
 }
 
 .task-page {
-  padding: 1.5rem 1rem 6rem;
+  padding: 1.5rem 1rem calc(6rem + env(safe-area-inset-bottom));
 }
 
 .page-intro {
@@ -1203,6 +1256,11 @@ button:disabled {
     display: grid;
     grid-template-columns: 15rem minmax(0, 1fr);
     align-items: start;
+  }
+
+  .app-status-stack {
+    width: min(100%, 80rem);
+    padding: 1rem clamp(2rem, 4vw, 4rem) 0;
   }
 
   .app-header {

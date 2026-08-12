@@ -1,3 +1,4 @@
+import { fuzzy } from "fast-fuzzy";
 import {
   useEffect,
   useLayoutEffect,
@@ -6,12 +7,13 @@ import {
   type FormEvent,
   type MouseEvent,
 } from "react";
-import { fuzzy } from "fast-fuzzy";
 import { Navigate, NavLink, Route, Routes, useLocation } from "react-router";
 
 import type { CategoryResponse, TaskResponse } from "../shared/api";
+import { PwaStatus } from "./PwaStatus";
 import {
   archiveTask,
+  BACKEND_STATUS_EVENT,
   completeTask,
   createCategory,
   createTask,
@@ -27,6 +29,7 @@ import {
   TaskApiError,
   undoCompletion,
   updateTask,
+  type BackendStatus,
 } from "./task-api";
 
 type LoadState = "loading" | "ready" | "error";
@@ -1801,12 +1804,58 @@ export function App() {
     useState<EditorDependencies | null>(null);
   const [dependencyState, setDependencyState] =
     useState<DependencyState>("idle");
+  const [appearsOffline, setAppearsOffline] = useState(
+    () => typeof navigator !== "undefined" && navigator.onLine === false,
+  );
+  const [backendUnavailable, setBackendUnavailable] = useState(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const searchReturnFocusRef = useRef<HTMLElement | null>(null);
   const nextUndoIdRef = useRef(1);
 
   const completionDisabledTaskIds = new Set(completingTaskIds);
   for (const item of undoItems) completionDisabledTaskIds.add(item.taskId);
+
+  useEffect(() => {
+    function handleBackendStatus(event: Event) {
+      const status = (event as CustomEvent<BackendStatus>).detail;
+      setBackendUnavailable(status === "unreachable");
+    }
+
+    window.addEventListener(BACKEND_STATUS_EVENT, handleBackendStatus);
+    return () =>
+      window.removeEventListener(BACKEND_STATUS_EVENT, handleBackendStatus);
+  }, []);
+
+  useEffect(() => {
+    function handleOffline() {
+      setAppearsOffline(true);
+    }
+
+    function handleOnline() {
+      setAppearsOffline(false);
+      if (loadState === "error") setLoadAttempt((attempt) => attempt + 1);
+      if (isCategoryView && categoryLoadState === "error") {
+        setCategoryLoadAttempt((attempt) => attempt + 1);
+      }
+      if (isManageCategories && managementLoadState === "error") {
+        setManagementLoadState("loading");
+        setManagementLoadAttempt((attempt) => attempt + 1);
+      }
+    }
+
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [
+    categoryLoadState,
+    isCategoryView,
+    isManageCategories,
+    loadState,
+    managementLoadState,
+  ]);
 
   useEffect(() => {
     const abortController = new AbortController();
@@ -2103,6 +2152,10 @@ export function App() {
     <div className="app-shell">
       <AppNavigation onSearch={openSearch} />
       <div className="app-content">
+        <PwaStatus
+          appearsOffline={appearsOffline}
+          backendUnavailable={backendUnavailable}
+        />
         <Routes>
           <Route
             path="/"

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -32,6 +32,7 @@ describe("GET /api/health", () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: "ok" });
+    expect(response.headers["cache-control"]).toBe("no-store");
   });
 
   it("rejects an invalid deployment timezone when creating the app", () => {
@@ -62,7 +63,47 @@ describe("GET /api/health", () => {
       const response = await request(app).get(path);
       expect(response.status).toBe(200);
       expect(response.headers["content-type"]).toMatch(/^text\/html/);
+      expect(response.headers["cache-control"]).toBe("no-cache");
       expect(response.text).toContain("TimeSince test client");
     }
+
+    const missingApiRoute = await request(app).get("/api/missing");
+    expect(missingApiRoute.status).toBe(404);
+    expect(missingApiRoute.headers["content-type"]).toMatch(
+      /^application\/json/,
+    );
+    expect(missingApiRoute.headers["cache-control"]).toBe("no-store");
+    expect(missingApiRoute.text).not.toContain("TimeSince test client");
+  });
+
+  it("uses version-aware cache headers for production PWA assets", async () => {
+    const database = openDatabase({ path: ":memory:" });
+    databases.add(database);
+    const clientDirectory = await mkdtemp(join(tmpdir(), "timesince-client-"));
+    temporaryDirectories.add(clientDirectory);
+    await mkdir(join(clientDirectory, "assets"));
+    await Promise.all([
+      writeFile(join(clientDirectory, "index.html"), "<!doctype html>"),
+      writeFile(join(clientDirectory, "manifest.webmanifest"), "{}"),
+      writeFile(join(clientDirectory, "sw.js"), "// service worker"),
+      writeFile(join(clientDirectory, "assets", "app-123.js"), "// app"),
+    ]);
+
+    const app = createApp({
+      clientDirectory,
+      database,
+      timeZone: "Europe/London",
+    });
+    const [asset, manifest, serviceWorker] = await Promise.all([
+      request(app).get("/assets/app-123.js"),
+      request(app).get("/manifest.webmanifest"),
+      request(app).get("/sw.js"),
+    ]);
+
+    expect(asset.headers["cache-control"]).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(manifest.headers["cache-control"]).toBe("no-cache");
+    expect(serviceWorker.headers["cache-control"]).toBe("no-cache");
   });
 });

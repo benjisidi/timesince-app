@@ -13,6 +13,38 @@ import type {
   UpdateTaskRequest,
 } from "../shared/api";
 
+export const BACKEND_STATUS_EVENT = "timesince:backend-status";
+export type BackendStatus = "reachable" | "unreachable";
+let backendFailureVersion = 0;
+
+function reportBackendStatus(status: BackendStatus) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<BackendStatus>(BACKEND_STATUS_EVENT, { detail: status }),
+  );
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+async function apiFetch(input: RequestInfo | URL, init?: RequestInit) {
+  const failureVersionAtStart = backendFailureVersion;
+  try {
+    const response = await fetch(input, init);
+    if (failureVersionAtStart === backendFailureVersion) {
+      reportBackendStatus("reachable");
+    }
+    return response;
+  } catch (error) {
+    if (!isAbortError(error)) {
+      backendFailureVersion += 1;
+      reportBackendStatus("unreachable");
+    }
+    throw error;
+  }
+}
+
 export class TaskApiError extends Error {
   constructor(
     message: string,
@@ -46,7 +78,7 @@ async function readJson<T>(response: Response): Promise<T> {
 }
 
 async function fetchTaskList(path: string, signal: AbortSignal) {
-  const response = await fetch(path, { signal });
+  const response = await apiFetch(path, { signal });
   return (await readJson<TaskListResponse>(response)).tasks;
 }
 
@@ -66,9 +98,9 @@ export async function fetchAllActiveTasks(signal: AbortSignal) {
 export async function fetchCategoryView(signal: AbortSignal) {
   const requestInit = { signal };
   const [taskResponse, categoryResponse, configResponse] = await Promise.all([
-    fetch("/api/tasks?state=all", requestInit),
-    fetch("/api/categories", requestInit),
-    fetch("/api/config", requestInit),
+    apiFetch("/api/tasks?state=all", requestInit),
+    apiFetch("/api/categories", requestInit),
+    apiFetch("/api/config", requestInit),
   ]);
   const [{ tasks }, { categories }, config] = await Promise.all([
     readJson<TaskListResponse>(taskResponse),
@@ -80,7 +112,7 @@ export async function fetchCategoryView(signal: AbortSignal) {
 }
 
 export async function fetchCategories(signal?: AbortSignal) {
-  const response = await fetch(
+  const response = await apiFetch(
     "/api/categories",
     signal ? { signal } : undefined,
   );
@@ -90,7 +122,7 @@ export async function fetchCategories(signal?: AbortSignal) {
 export async function createCategory(
   input: CreateCategoryRequest,
 ): Promise<CategoryResponse> {
-  const response = await fetch("/api/categories", {
+  const response = await apiFetch("/api/categories", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
@@ -102,7 +134,7 @@ export async function renameCategory(
   categoryId: number,
   input: UpdateCategoryRequest,
 ): Promise<CategoryResponse> {
-  const response = await fetch(`/api/categories/${categoryId}`, {
+  const response = await apiFetch(`/api/categories/${categoryId}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
@@ -113,7 +145,7 @@ export async function renameCategory(
 export async function reorderCategories(
   input: ReorderCategoriesRequest,
 ): Promise<CategoryResponse[]> {
-  const response = await fetch("/api/categories/order", {
+  const response = await apiFetch("/api/categories/order", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
@@ -129,7 +161,7 @@ export async function deleteCategory(
     replacementCategoryId === null
       ? ""
       : `?replacementCategoryId=${replacementCategoryId}`;
-  const response = await fetch(`/api/categories/${categoryId}${query}`, {
+  const response = await apiFetch(`/api/categories/${categoryId}${query}`, {
     method: "DELETE",
   });
   return (await readJson<CategoryListResponse>(response)).categories;
@@ -138,7 +170,7 @@ export async function deleteCategory(
 export async function completeTask(
   taskId: number,
 ): Promise<CompletionMutationResponse> {
-  const response = await fetch(`/api/tasks/${taskId}/completions`, {
+  const response = await apiFetch(`/api/tasks/${taskId}/completions`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: "{}",
@@ -149,22 +181,22 @@ export async function completeTask(
 export async function undoCompletion(
   completionId: number,
 ): Promise<CompletionMutationResponse> {
-  const response = await fetch(`/api/completions/${completionId}`, {
+  const response = await apiFetch(`/api/completions/${completionId}`, {
     method: "DELETE",
   });
   return readJson<CompletionMutationResponse>(response);
 }
 
 export async function fetchTask(taskId: number): Promise<TaskResponse> {
-  const response = await fetch(`/api/tasks/${taskId}`);
+  const response = await apiFetch(`/api/tasks/${taskId}`);
   return readJson<TaskResponse>(response);
 }
 
 export async function fetchEditorDependencies(signal?: AbortSignal) {
   const requestInit = signal ? { signal } : undefined;
   const [categoryResponse, configResponse] = await Promise.all([
-    fetch("/api/categories", requestInit),
-    fetch("/api/config", requestInit),
+    apiFetch("/api/categories", requestInit),
+    apiFetch("/api/config", requestInit),
   ]);
   const [{ categories }, config] = await Promise.all([
     readJson<CategoryListResponse>(categoryResponse),
@@ -176,7 +208,7 @@ export async function fetchEditorDependencies(signal?: AbortSignal) {
 export async function createTask(
   input: CreateTaskRequest,
 ): Promise<TaskResponse> {
-  const response = await fetch("/api/tasks", {
+  const response = await apiFetch("/api/tasks", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
@@ -188,7 +220,7 @@ export async function updateTask(
   taskId: number,
   input: UpdateTaskRequest,
 ): Promise<TaskResponse> {
-  const response = await fetch(`/api/tasks/${taskId}`, {
+  const response = await apiFetch(`/api/tasks/${taskId}`, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
@@ -197,7 +229,9 @@ export async function updateTask(
 }
 
 export async function archiveTask(taskId: number): Promise<void> {
-  const response = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+  const response = await apiFetch(`/api/tasks/${taskId}`, {
+    method: "DELETE",
+  });
   if (!response.ok) {
     await readJson<never>(response);
   }

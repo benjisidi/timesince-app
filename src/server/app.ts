@@ -32,6 +32,10 @@ export function createApp(options: CreateAppOptions) {
 
   app.disable("x-powered-by");
   app.use(express.json());
+  app.use("/api", (_request, response, next) => {
+    response.setHeader("Cache-Control", "no-store");
+    next();
+  });
 
   app.get("/api/health", (_request, response) => {
     const health: HealthResponse = { status: "ok" };
@@ -57,13 +61,35 @@ export function createApp(options: CreateAppOptions) {
 
   if (options.clientDirectory) {
     const clientDirectory = resolve(options.clientDirectory);
-    app.use(express.static(clientDirectory));
+    app.use(
+      "/assets",
+      express.static(resolve(clientDirectory, "assets"), {
+        immutable: true,
+        maxAge: "1y",
+      }),
+    );
+    app.use(
+      express.static(clientDirectory, {
+        setHeaders(response, filePath) {
+          const fileName = filePath.split(/[\\/]/).at(-1);
+          if (
+            fileName === "index.html" ||
+            fileName === "sw.js" ||
+            fileName?.endsWith(".webmanifest") ||
+            fileName?.startsWith("workbox-")
+          ) {
+            response.setHeader("Cache-Control", "no-cache");
+          }
+        },
+      }),
+    );
     app.use((request, response, next) => {
       if (request.method !== "GET" || request.path.startsWith("/api/")) {
         next();
         return;
       }
 
+      response.setHeader("Cache-Control", "no-cache");
       response.sendFile(resolve(clientDirectory, "index.html"));
     });
   }

@@ -108,7 +108,7 @@ npm run build
 ```sh
 npm run build
 npm run db:migrate:prod
-NODE_ENV=production npm start
+npm start
 ```
 
 The production Express process serves both the JSON API and the built frontend
@@ -118,3 +118,46 @@ override the port.
 Tests and production builds do not load `.env`. They pass configuration
 explicitly or compile without starting the application, so a developer's local
 settings cannot affect validation artifacts.
+
+## PWA development and QA
+
+The normal `npm run dev` workflow does not register a service worker. This
+prevents a cached production shell from interfering with source changes. Build
+and start the production application to inspect PWA behaviour locally:
+
+```sh
+npm run build
+npm start
+```
+
+Loopback URLs such as `http://127.0.0.1:3000` are valid for desktop service
+worker and installation testing. A physical phone requires the deployed HTTPS
+origin; plain HTTP over the local network is not an installable production
+test.
+
+The service worker precaches only the application shell and static build
+assets. It never caches `/api` responses, task data, or mutations. An installed
+app can therefore launch its shell without connectivity, but it still needs the
+Express server to load or change tasks. Failed writes are rolled back and are
+not queued for later.
+
+For manual QA, use the browser's Application/PWA developer tools rather than a
+deprecated aggregate PWA score. Inspect:
+
+- manifest identity, scope, standalone display, colors, and installability
+  errors;
+- standard icons and maskable-icon safe areas;
+- service-worker registration, scope, waiting/active lifecycle, and update
+  prompt;
+- Cache Storage contents, confirming only shell/static assets are present and
+  `/api` is absent;
+- offline launch and direct navigation to `/`, `/categories`, and
+  `/categories/manage`;
+- backend-unavailable and offline-hint wording, manual Retry, and recovery after
+  the browser emits an `online` event;
+- failed completion/save rollback with no queued mutation;
+- a second production build, confirming the current session is not reloaded
+  until the user accepts the update and obsolete precache entries are removed.
+
+If a previously installed development build causes confusion, unregister its
+service worker and clear its site storage in the same developer-tools panel.

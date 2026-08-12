@@ -22,8 +22,7 @@ npm run db:seed:dev     seed an empty migrated development database
 npm run db:fixtures:dev reset, migrate, and seed development fixtures
 npm run check           run typecheck, lint, format check, tests, and build
 npm run build           create the production frontend and server bundles
-NODE_ENV=production npm start
-                        run the production build; loads optional .env
+npm start               run the production build; loads optional .env
 ```
 
 Application startup does not apply database migrations automatically.
