@@ -1,0 +1,30 @@
+import { fetchCategories } from "./categories";
+import { fetchAppConfig } from "./config";
+import { fetchAllActiveTasks, fetchTaskList } from "./tasks";
+
+export async function fetchTaskView(signal: AbortSignal) {
+  const [ready, sleeping] = await Promise.all([
+    fetchTaskList("/api/tasks?state=ready&visibleInReady=true", signal),
+    fetchTaskList("/api/tasks?state=sleeping", signal),
+  ]);
+
+  return { ready, sleeping };
+}
+
+export async function fetchCategoryView(signal: AbortSignal) {
+  const [tasks, categories, config] = await Promise.all([
+    fetchAllActiveTasks(signal),
+    fetchCategories(signal),
+    fetchAppConfig(signal),
+  ]);
+
+  return { tasks, categories, timeZone: config.timeZone };
+}
+
+export async function fetchEditorDependencies(signal?: AbortSignal) {
+  const [categories, config] = await Promise.all([
+    fetchCategories(signal),
+    fetchAppConfig(signal),
+  ]);
+  return { categories, timeZone: config.timeZone };
+}

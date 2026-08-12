@@ -3,31 +3,37 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 
 import type { CategoryResponse, TaskResponse } from "../shared/api";
+import {
+  createCategory,
+  deleteCategory,
+  fetchCategories,
+  renameCategory,
+  reorderCategories,
+} from "./api/categories";
+import {
+  BACKEND_STATUS_EVENT,
+  TaskApiError,
+  type BackendStatus,
+} from "./api/client";
+import {
+  fetchCategoryView,
+  fetchEditorDependencies,
+  fetchTaskView,
+} from "./api/loaders";
+import {
+  archiveTask,
+  completeTask,
+  createTask,
+  fetchAllActiveTasks,
+  fetchTask,
+  undoCompletion,
+  updateTask,
+} from "./api/tasks";
 import { AppNavigation } from "./components/AppNavigation";
 import { AddTaskButton, TaskRow } from "./components/TaskList";
 import { BrowsePage } from "./pages/BrowsePage";
 import { ReadyPage } from "./pages/ReadyPage";
 import { PwaStatus } from "./PwaStatus";
-import {
-  archiveTask,
-  BACKEND_STATUS_EVENT,
-  completeTask,
-  createCategory,
-  createTask,
-  deleteCategory,
-  fetchAllActiveTasks,
-  fetchCategories,
-  fetchCategoryView,
-  fetchEditorDependencies,
-  fetchTask,
-  fetchTaskView,
-  renameCategory,
-  reorderCategories,
-  TaskApiError,
-  undoCompletion,
-  updateTask,
-  type BackendStatus,
-} from "./task-api";
 
 type LoadState = "loading" | "ready" | "error";
 type DependencyState = "idle" | LoadState;
