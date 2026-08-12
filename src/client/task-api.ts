@@ -83,12 +83,12 @@ async function fetchTaskList(path: string, signal: AbortSignal) {
 }
 
 export async function fetchTaskView(signal: AbortSignal) {
-  const [ready, upcoming] = await Promise.all([
+  const [ready, sleeping] = await Promise.all([
     fetchTaskList("/api/tasks?state=ready&visibleInReady=true", signal),
     fetchTaskList("/api/tasks?state=sleeping", signal),
   ]);
 
-  return { ready, upcoming };
+  return { ready, sleeping };
 }
 
 export async function fetchAllActiveTasks(signal: AbortSignal) {

@@ -586,7 +586,17 @@ Do not implement full offline mutation synchronisation.
 
 # Milestone 13 — Information architecture and flow cleanup
 
-**Status:** Not started
+**Status:** Complete
+
+Implemented 2026-08-12. The application now uses Ready and Browse as its two
+primary destinations, with persistent mobile navigation and contextual category
+management. Ready remains the dominant action surface while Sleeping is a
+collapsed, retained secondary section. Browse now shows visible-Ready/total
+category summaries, ordered Ready/Sleeping/snoozed groups, a conditional Later
+divider, and neutral snooze context. Task-editor wording and Last done/Snooze
+presentation were updated without changing API contracts or task semantics.
+Focused frontend coverage and the full repository validation suite pass. Manual
+mobile and desktop QA was completed successfully before commit.
 
 ## Goal
 
@@ -799,16 +809,10 @@ Do not make this field more prominent than the normal create flow.
 
 ### Category creation
 
-Add lightweight inline category creation from the task editor if it can be implemented without turning the selector into a complex custom component.
-
-Preferred interaction:
-
-- category selector contains an `Add category…` option or nearby action;
-- user can create a category without closing the task editor;
-- the newly created category becomes selected immediately;
-- the full Manage Categories page remains available for rename/reorder/delete.
-
-Do not duplicate the whole category-management UI inside the task editor.
+Inline category creation is deferred until real-world usage demonstrates that it
+is needed. Keep the existing category selector and contextual Manage Categories
+page; do not add category-management behaviour to the task editor in this
+milestone.
 
 ---
 
@@ -917,7 +921,6 @@ Update/add focused tests for:
 - Browse Ready/Later grouping;
 - category Ready/total summaries;
 - navigation changes;
-- inline category creation if implemented;
 - task editor Last done / Snooze changes.
 
 Do not add visual snapshots or exhaustive responsive-layout tests.
@@ -958,7 +961,6 @@ Verify at representative mobile and desktop widths.
 
 - Repeated creation remains fast.
 - Target wording is clear.
-- Inline category creation is efficient.
 - Last done is visible when editing.
 - Snooze is easy to find.
 - Archive remains clearly secondary.

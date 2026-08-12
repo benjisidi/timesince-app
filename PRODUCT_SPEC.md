@@ -172,9 +172,10 @@ that calendar day in that timezone.
 
 ## 5. Primary views
 
-## 5.1 Task view
+## 5.1 Ready
 
-This is the default day-to-day view.
+This is the default day-to-day view and the application's primary action
+surface.
 
 It contains:
 
@@ -183,17 +184,19 @@ Tasks whose sleep interval has elapsed.
 
 Display a count in the section heading.
 
-### Upcoming
+### Sleeping
 Sleeping tasks.
 
-This section may be collapsible because it is secondary to the Ready list.
+This section is secondary to the Ready list. It shows a task count, is
+collapsed by default, and can be expanded when the user wants to inspect
+sleeping tasks.
 
-"Upcoming" means only that the task is still sleeping. Do not display a countdown such as "3 days remaining" by default.
+Do not display a countdown such as "3 days remaining" by default.
 
 Suggested ordering:
 
 - Ready: longest time since completion first;
-- Upcoming: longest time since completion first;
+- Sleeping: longest time since completion first;
 - never-completed tasks: at the top of Ready.
 
 Each row should show at minimum:
@@ -204,13 +207,17 @@ Each row should show at minimum:
 - elapsed-time display;
 - target interval as secondary context where needed.
 
-Completing a Ready task should cause it to leave Ready immediately and enter Upcoming.
+Completing a Ready task should cause it to leave Ready immediately and enter
+Sleeping.
+
+When no tasks are Ready, the empty state should communicate calmly that having
+nothing ready is a valid outcome. Sleeping tasks remain accessible beneath it.
 
 ---
 
-## 5.2 Category view
+## 5.2 Browse
 
-Shows tasks grouped by category.
+Shows every active task grouped by category.
 
 This is useful for situations such as walking into a room and asking "what can I do here?"
 
@@ -221,6 +228,21 @@ Requirements:
 - category sections show all relevant tasks rather than only Ready tasks;
 - each task remains completable directly from the list;
 - filters/search may be added without changing the underlying task model.
+
+Category headings show the number of tasks currently visible in Ready and the
+total number of active tasks in the category. A snoozed Ready task is excluded
+from the displayed Ready count.
+
+Within each category, order tasks as:
+
+1. non-snoozed Ready tasks;
+2. non-snoozed Sleeping tasks;
+3. snoozed tasks.
+
+When both non-snoozed Ready and Sleeping tasks are present, separate the
+Sleeping group with a subtle `Later` divider rather than labelling every row.
+Keep snoozed tasks visible with neutral snooze context. Keep Uncategorized last
+and show it only when required.
 
 On desktop, category groups may use a denser layout than mobile.
 
@@ -236,6 +258,12 @@ A task editor should support:
 - optional previous/initial completion date;
 - optional snooze/ignore-until value when editing;
 - archive/delete action when editing an existing task.
+
+Use user-facing wording such as `Show again after … days` for the target
+interval. Keep an optional `Previously completed` / `Last done` date secondary
+to the normal creation path. When editing, show the latest completion as
+read-only `Last done` context and make Snooze discoverable as a secondary
+section without presenting it as scheduling or urgency.
 
 Archived tasks retain their fields and completion history. They are read-only
 until explicitly restored to active status.
@@ -264,12 +292,15 @@ Tasks in a removed category become Uncategorized unless the user explicitly choo
 
 Mobile navigation should remain compact.
 
-The mockup's menu model is suitable for v1:
+Primary navigation contains only:
 
-- Task view;
-- Category view;
-- Manage categories;
-- Settings when settings actually exist.
+- Ready;
+- Browse.
+
+Search remains a global utility. Category management is reached contextually
+from Browse rather than being a primary destination. On mobile, Ready and
+Browse should remain persistently accessible when that can be done without
+obscuring primary controls or safe areas.
 
 Desktop navigation may move these options into a persistent sidebar/header where space allows.
 
@@ -304,7 +335,7 @@ Snoozing:
 - does not affect completion history;
 - suppresses the task from Ready until the snooze expires.
 
-The task should still be discoverable in category/all-task views.
+The task should still be discoverable in Browse.
 
 ---
 
@@ -350,8 +381,8 @@ v1 includes:
 
 - responsive mobile/desktop web UI;
 - installable PWA;
-- Task view;
-- Category view;
+- Ready view;
+- Browse view;
 - task creation/editing;
 - single category per task;
 - category management;

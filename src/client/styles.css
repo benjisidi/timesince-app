@@ -175,47 +175,24 @@ a:focus-visible {
   font-weight: 700;
 }
 
-.mobile-navigation summary {
-  display: grid;
-  width: 2.75rem;
-  height: 2.75rem;
-  padding: 0.65rem;
-  border: 1px solid #c3cec6;
-  border-radius: 0.7rem;
-  background: #f7faf7;
-  cursor: pointer;
-  list-style: none;
-  place-content: center;
-}
-
-.mobile-navigation summary::-webkit-details-marker {
-  display: none;
-}
-
-.mobile-navigation summary span {
-  display: block;
-  width: 1.25rem;
-  height: 2px;
-  margin-block: 0.13rem;
-  border-radius: 999px;
-  background: #52655c;
-}
-
-.mobile-navigation nav {
-  position: absolute;
+.mobile-navigation {
+  position: fixed;
   z-index: 4;
-  top: calc(100% - 0.5rem);
-  right: 1rem;
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: grid;
-  width: min(14rem, calc(100vw - 2rem));
-  padding: 0.4rem;
-  border: 1px solid #c3cec6;
-  border-radius: 0.85rem;
-  background: #fff;
-  box-shadow: 0 0.75rem 2rem rgb(21 35 29 / 18%);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.5rem max(1rem, env(safe-area-inset-right))
+    max(0.5rem, env(safe-area-inset-bottom))
+    max(1rem, env(safe-area-inset-left));
+  border-top: 1px solid #c3cec6;
+  background: rgb(255 255 255 / 96%);
+  box-shadow: 0 -0.5rem 1.5rem rgb(21 35 29 / 8%);
 }
 
-.mobile-navigation nav a,
+.mobile-navigation a,
 .desktop-navigation a {
   color: #40544a;
   font-size: 0.86rem;
@@ -223,14 +200,17 @@ a:focus-visible {
   text-decoration: none;
 }
 
-.mobile-navigation nav a {
+.mobile-navigation a {
+  display: grid;
   min-height: 2.75rem;
-  padding: 0.75rem;
+  padding: 0.65rem 0.75rem;
   border-radius: 0.55rem;
+  text-align: center;
+  place-items: center;
 }
 
-.mobile-navigation nav a:hover,
-.mobile-navigation nav a[aria-current="page"] {
+.mobile-navigation a:hover,
+.mobile-navigation a[aria-current="page"] {
   background: #e7eee9;
   color: #245b45;
 }
@@ -464,16 +444,11 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 
-.category-section .category-count {
-  display: inline-grid;
-  min-width: 1.55rem;
-  height: 1.55rem;
-  padding-inline: 0.4rem;
-  border-radius: 999px;
-  background: #e7eee9;
-  color: #4d655a;
+.category-summary {
+  color: #64746c;
   font-size: 0.75rem;
-  place-items: center;
+  font-weight: 650;
+  white-space: nowrap;
 }
 
 .category-chevron {
@@ -493,6 +468,74 @@ a:focus-visible {
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.sleeping-section {
+  margin-top: 1.5rem;
+  box-shadow: 0 0.35rem 1rem rgb(36 49 44 / 4%);
+}
+
+.sleeping-section h2 {
+  padding: 0;
+}
+
+.sleeping-section h2 button {
+  display: grid;
+  width: 100%;
+  min-height: 3.25rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.75rem 1rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sleeping-section h2 button:hover {
+  background: #f5f8f5;
+}
+
+.section-count {
+  display: inline-grid;
+  min-width: 1.55rem;
+  height: 1.55rem;
+  padding-inline: 0.4rem;
+  border-radius: 999px;
+  background: #e7eee9;
+  color: #4d655a;
+  font-size: 0.75rem;
+  place-items: center;
+}
+
+.section-chevron {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-right: 2px solid #60746a;
+  border-bottom: 2px solid #60746a;
+  transform: rotate(45deg) translateY(-0.12rem);
+  transition: transform 120ms ease;
+}
+
+.sleeping-section button[aria-expanded="false"] .section-chevron {
+  transform: rotate(-45deg) translateX(-0.12rem);
+}
+
+.browse-divider {
+  padding: 0.7rem 1rem 0.45rem 3.5rem;
+  border-top: 1px solid #d7dfd9;
+  color: #748179;
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  list-style: none;
+  text-transform: uppercase;
+}
+
+.browse-divider + .task-row {
+  border-top: 0;
 }
 
 .task-row {
@@ -699,7 +742,7 @@ a:focus-visible {
   position: fixed;
   z-index: 2;
   right: max(1rem, calc((100vw - 44rem) / 2 + 1rem));
-  bottom: max(1rem, env(safe-area-inset-bottom));
+  bottom: calc(4.5rem + env(safe-area-inset-bottom));
   display: grid;
   width: 3.5rem;
   height: 3.5rem;
@@ -728,7 +771,7 @@ a:focus-visible {
   position: fixed;
   z-index: 3;
   right: max(1rem, calc((100vw - 44rem) / 2 + 1rem));
-  bottom: max(5.25rem, calc(env(safe-area-inset-bottom) + 5.25rem));
+  bottom: calc(8.75rem + env(safe-area-inset-bottom));
   display: grid;
   width: min(calc(100vw - 2rem), 24rem);
   gap: 0.65rem;
@@ -1032,15 +1075,54 @@ a:focus-visible {
   margin-top: 0.75rem;
 }
 
-.completion-context,
 .timezone-help {
   color: #68786f;
   font-size: 0.75rem;
   line-height: 1.45;
 }
 
-.completion-context {
-  margin: 0.5rem 0 0;
+.edit-task-context {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1.15rem;
+}
+
+.last-done-context,
+.snooze-fields {
+  padding: 0.85rem 0.9rem;
+  border: 1px solid #d5ded7;
+  border-radius: 0.8rem;
+  background: #fff;
+}
+
+.last-done-context {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  color: #40544a;
+  font-size: 0.84rem;
+}
+
+.last-done-context span {
+  font-weight: 750;
+}
+
+.last-done-context strong {
+  color: #68786f;
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-align: right;
+}
+
+.snooze-fields h3 {
+  margin: 0;
+  color: #40544a;
+  font-size: 0.84rem;
+}
+
+.snooze-fields .form-field {
+  margin-top: 0.75rem;
 }
 
 .timezone-help {
@@ -1178,6 +1260,14 @@ button:disabled {
 
   .mobile-navigation {
     display: none;
+  }
+
+  .add-task-button {
+    bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+
+  .undo-stack {
+    bottom: max(5.25rem, calc(env(safe-area-inset-bottom) + 5.25rem));
   }
 
   .desktop-navigation {
@@ -1444,17 +1534,6 @@ button:disabled {
 }
 
 @media (min-width: 78rem) {
-  .task-sections {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: start;
-    gap: 1.5rem;
-  }
-
-  .task-sections .task-section {
-    margin-top: 0;
-  }
-
   .category-groups {
     display: grid;
     grid-auto-flow: dense;
@@ -1493,6 +1572,10 @@ button:disabled {
   }
 
   .category-chevron {
+    transition: none;
+  }
+
+  .section-chevron {
     transition: none;
   }
 }

@@ -301,10 +301,10 @@ describe("Global search", () => {
   });
 });
 
-describe("Task view", () => {
+describe("Ready view", () => {
   it("optimistically completes a Ready task and undoes its exact completion", async () => {
     const readyTask = task({ id: 1, name: "Hoover floor" });
-    const upcomingTask = task({
+    const sleepingTask = task({
       id: 2,
       name: "Wash towels",
       elapsedDays: 4,
@@ -332,7 +332,7 @@ describe("Task view", () => {
           return jsonResponse({ tasks: [readyTask] });
         }
         if (url.includes("state=sleeping")) {
-          return jsonResponse({ tasks: [upcomingTask] });
+          return jsonResponse({ tasks: [sleepingTask] });
         }
         if (url === "/api/tasks/1/completions" && init?.method === "POST") {
           return completionResponse.promise;
@@ -358,9 +358,15 @@ describe("Task view", () => {
     renderApp();
 
     const readySection = await screen.findByRole("region", { name: /Ready/ });
-    const upcomingSection = screen.getByRole("region", { name: /Upcoming/ });
+    const sleepingSection = screen.getByRole("region", { name: /Sleeping/ });
     expect(within(readySection).getByText("Hoover floor")).toBeTruthy();
-    expect(within(upcomingSection).getByText("Wash towels")).toBeTruthy();
+    expect(within(sleepingSection).queryByText("Wash towels")).toBeNull();
+    const sleepingToggle = within(sleepingSection).getByRole("button", {
+      name: "Sleeping 1 task",
+    });
+    expect(sleepingToggle.getAttribute("aria-expanded")).toBe("false");
+    await userEvent.click(sleepingToggle);
+    expect(within(sleepingSection).getByText("Wash towels")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Ready 1 task" })).toBeTruthy();
 
     await userEvent.click(
@@ -370,13 +376,13 @@ describe("Task view", () => {
     );
 
     expect(within(readySection).queryByText("Hoover floor")).toBeNull();
-    expect(within(upcomingSection).getByText("Hoover floor")).toBeTruthy();
+    expect(within(sleepingSection).getByText("Hoover floor")).toBeTruthy();
     expect(
       screen.queryByRole("button", { name: /Undo completion/ }),
     ).toBeNull();
-    const upcomingRows = within(upcomingSection).getAllByRole("listitem");
-    expect(within(upcomingRows[0]!).getByText("Wash towels")).toBeTruthy();
-    expect(within(upcomingRows[1]!).getByText("Hoover floor")).toBeTruthy();
+    const sleepingRows = within(sleepingSection).getAllByRole("listitem");
+    expect(within(sleepingRows[0]!).getByText("Wash towels")).toBeTruthy();
+    expect(within(sleepingRows[1]!).getByText("Hoover floor")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Ready 0 tasks" })).toBeTruthy();
 
     completionResponse.resolve(
@@ -401,7 +407,7 @@ describe("Task view", () => {
     );
     await waitFor(() => {
       expect(within(readySection).getByText("Hoover floor")).toBeTruthy();
-      expect(within(upcomingSection).queryByText("Hoover floor")).toBeNull();
+      expect(within(sleepingSection).queryByText("Hoover floor")).toBeNull();
     });
     expect(
       fetchMock.mock.calls.some(
@@ -437,7 +443,12 @@ describe("Task view", () => {
 
     renderApp();
     const readySection = await screen.findByRole("region", { name: /Ready/ });
-    const upcomingSection = screen.getByRole("region", { name: /Upcoming/ });
+    const sleepingSection = screen.getByRole("region", { name: /Sleeping/ });
+    await userEvent.click(
+      within(sleepingSection).getByRole("button", {
+        name: "Sleeping 0 tasks",
+      }),
+    );
     await userEvent.click(
       within(readySection).getByRole("button", {
         name: "Complete Hoover floor",
@@ -445,7 +456,7 @@ describe("Task view", () => {
     );
 
     expect(within(readySection).queryByText("Hoover floor")).toBeNull();
-    expect(within(upcomingSection).getByText("Hoover floor")).toBeTruthy();
+    expect(within(sleepingSection).getByText("Hoover floor")).toBeTruthy();
 
     completionResponse.resolve(
       jsonResponse(
@@ -459,7 +470,7 @@ describe("Task view", () => {
     ).toBeTruthy();
     expect(within(readySection).getByText("Hoover floor")).toBeTruthy();
     expect(within(readySection).getByText("Clean sink")).toBeTruthy();
-    expect(within(upcomingSection).queryByText("Hoover floor")).toBeNull();
+    expect(within(sleepingSection).queryByText("Hoover floor")).toBeNull();
     expect(screen.getByRole("heading", { name: "Ready 2 tasks" })).toBeTruthy();
   });
 
@@ -541,14 +552,19 @@ describe("Task view", () => {
 
     renderApp();
     const readySection = await screen.findByRole("region", { name: /Ready/ });
-    const upcomingSection = screen.getByRole("region", { name: /Upcoming/ });
+    const sleepingSection = screen.getByRole("region", { name: /Sleeping/ });
+    await userEvent.click(
+      within(sleepingSection).getByRole("button", {
+        name: "Sleeping 1 task",
+      }),
+    );
     await userEvent.click(
       within(readySection).getByRole("button", {
         name: "Complete Hoover floor",
       }),
     );
     await userEvent.click(
-      within(upcomingSection).getByRole("button", {
+      within(sleepingSection).getByRole("button", {
         name: "Complete Clean sink",
       }),
     );
@@ -561,7 +577,7 @@ describe("Task view", () => {
     ).toBeTruthy();
     expect(
       (
-        within(upcomingSection).getByRole("button", {
+        within(sleepingSection).getByRole("button", {
           name: "Complete Hoover floor",
         }) as HTMLButtonElement
       ).disabled,
@@ -571,7 +587,7 @@ describe("Task view", () => {
     const retry = await screen.findByRole("button", {
       name: "Retry undo for Hoover floor",
     });
-    expect(within(upcomingSection).getByText("Hoover floor")).toBeTruthy();
+    expect(within(sleepingSection).getByText("Hoover floor")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Undo completion of Clean sink" }),
     ).toBeTruthy();
@@ -579,7 +595,7 @@ describe("Task view", () => {
     await userEvent.click(retry);
     await waitFor(() => {
       expect(within(readySection).getByText("Hoover floor")).toBeTruthy();
-      expect(within(upcomingSection).queryByText("Hoover floor")).toBeNull();
+      expect(within(sleepingSection).queryByText("Hoover floor")).toBeNull();
     });
     expect(firstUndoAttempts).toBe(2);
   });
@@ -690,15 +706,20 @@ describe("Task view", () => {
     await screen.findByRole("option", { name: "Kitchen" });
 
     await userEvent.type(screen.getByLabelText("Name"), "Clean fridge");
-    await userEvent.type(screen.getByLabelText(/Target interval/), "30");
+    await userEvent.type(screen.getByLabelText(/Show again after/), "30");
     await userEvent.selectOptions(screen.getByLabelText("Category"), "2");
-    await userEvent.click(screen.getByText("Previous completion"));
-    await userEvent.type(screen.getByLabelText(/Last completed/), "2026-08-06");
+    await userEvent.click(screen.getByText("Previously completed"));
+    await userEvent.type(screen.getByLabelText(/Last done/), "2026-08-06");
     await userEvent.click(screen.getByRole("button", { name: "Create task" }));
 
-    const upcomingSection = screen.getByRole("region", { name: /Upcoming/ });
+    const sleepingSection = screen.getByRole("region", { name: /Sleeping/ });
+    await userEvent.click(
+      within(sleepingSection).getByRole("button", {
+        name: "Sleeping 1 task",
+      }),
+    );
     await waitFor(() => {
-      expect(within(upcomingSection).getByText("Clean fridge")).toBeTruthy();
+      expect(within(sleepingSection).getByText("Clean fridge")).toBeTruthy();
     });
     const createCall = fetchMock.mock.calls.find(
       ([input, init]) =>
@@ -760,7 +781,7 @@ describe("Task view", () => {
 
     const nameInput = screen.getByLabelText("Name") as HTMLInputElement;
     const targetInput = screen.getByLabelText(
-      /Target interval/,
+      /Show again after/,
     ) as HTMLInputElement;
     const categorySelect = screen.getByLabelText(
       "Category",
@@ -847,6 +868,8 @@ describe("Task view", () => {
       await screen.findByRole("button", { name: "Edit Hoover floor" }),
     );
     await screen.findByRole("option", { name: "Kitchen" });
+    expect(screen.getByText("Last done")).toBeTruthy();
+    expect(screen.getByLabelText(/Snooze until/)).toBeTruthy();
     const nameInput = screen.getByLabelText("Name");
     await userEvent.clear(nameInput);
     await userEvent.type(nameInput, "Vacuum floors");
@@ -863,7 +886,7 @@ describe("Task view", () => {
   });
 });
 
-describe("Category view", () => {
+describe("Browse view", () => {
   it("groups active tasks in category order and retains collapsed sections", async () => {
     const readyTask = task({ id: 1, name: "Clean worktop" });
     const sleepingTask = task({
@@ -926,7 +949,13 @@ describe("Category view", () => {
     });
 
     const firstRender = renderApp("/categories");
-    await screen.findByRole("heading", { name: "Categories" });
+    await screen.findByRole("heading", { name: "Browse" });
+    expect(screen.getAllByRole("link", { name: "Ready" })).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "Browse" })).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "Manage" })).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: "Manage categories" }),
+    ).toBeNull();
     const categorySections = await screen.findAllByRole("region");
     expect(
       categorySections.map((section) =>
@@ -938,9 +967,12 @@ describe("Category view", () => {
       "category-uncategorized-heading",
     ]);
     expect(screen.queryByText("Empty category")).toBeNull();
-    expect(screen.queryByText("Ready")).toBeNull();
-    expect(screen.queryByText("Sleeping")).toBeNull();
+    expect(within(categorySections[0]!).queryByText("Ready")).toBeNull();
+    expect(within(categorySections[0]!).queryByText("Sleeping")).toBeNull();
+    expect(screen.getByText("Later")).toBeTruthy();
+    expect(within(categorySections[1]!).queryByText("Later")).toBeNull();
     expect(screen.getByText(/Snoozed until/)).toBeTruthy();
+    expect(screen.getByLabelText("1 ready, 3 tasks")).toBeTruthy();
 
     const kitchen = categorySections[0]!;
     expect(
@@ -950,14 +982,16 @@ describe("Category view", () => {
     ).toEqual(["Edit Clean worktop", "Edit Clean oven", "Edit Mop floor"]);
 
     await userEvent.click(
-      screen.getByRole("button", { name: "Kitchen 3 tasks" }),
+      screen.getByRole("button", {
+        name: "Kitchen 1 ready, 3 tasks",
+      }),
     );
     expect(screen.queryByText("Clean worktop")).toBeNull();
     firstRender.unmount();
 
     renderApp("/categories");
     const retainedToggle = await screen.findByRole("button", {
-      name: "Kitchen 3 tasks",
+      name: "Kitchen 1 ready, 3 tasks",
     });
     expect(retainedToggle.getAttribute("aria-expanded")).toBe("false");
     await userEvent.click(retainedToggle);

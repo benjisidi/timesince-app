@@ -1,5 +1,6 @@
 import { fuzzy } from "fast-fuzzy";
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -63,6 +64,7 @@ interface UndoItem {
 
 const UNDO_LIFETIME_MS = 5_000;
 const COLLAPSED_CATEGORIES_KEY = "timesince.collapsed-categories.v1";
+const SLEEPING_EXPANDED_KEY = "timesince.sleeping-expanded.v1";
 const CATEGORY_GRID_ROW_PX = 8;
 const CATEGORY_GRID_GAP_PX = 24;
 const SEARCH_MATCH_THRESHOLD = 0.6;
@@ -100,7 +102,7 @@ function compareReady(first: TaskResponse, second: TaskResponse) {
   );
 }
 
-function compareUpcoming(first: TaskResponse, second: TaskResponse) {
+function compareSleeping(first: TaskResponse, second: TaskResponse) {
   return (
     (second.elapsedDays ?? 0) - (first.elapsedDays ?? 0) ||
     compareByNameAndId(first, second)
@@ -115,7 +117,7 @@ function compareCategoryTasks(first: TaskResponse, second: TaskResponse) {
   if (first.state !== second.state) return first.state === "ready" ? -1 : 1;
   return first.state === "ready"
     ? compareReady(first, second)
-    : compareUpcoming(first, second);
+    : compareSleeping(first, second);
 }
 
 function dateInTimeZone(timestamp: Date, timeZone: string) {
@@ -135,6 +137,15 @@ function addCalendarDays(value: string, days: number) {
   const date = new Date(Date.UTC(year as number, (month as number) - 1, day));
   date.setUTCDate(date.getUTCDate() + days);
   return date.toISOString().slice(0, 10);
+}
+
+function formatTaskDate(timestamp: string, timeZone: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone,
+  }).format(new Date(timestamp));
 }
 
 function TaskElapsedTime({ task }: { task: TaskResponse }) {
@@ -274,6 +285,66 @@ function TaskSection({
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+interface SleepingSectionProps extends Omit<TaskSectionProps, "title"> {
+  expanded: boolean;
+  onToggle: () => void;
+}
+
+function SleepingSection({
+  tasks,
+  emptyMessage,
+  expanded,
+  onToggle,
+  completingTaskIds,
+  completionDisabledTaskIds,
+  onComplete,
+  onEdit,
+}: SleepingSectionProps) {
+  const countLabel = `${tasks.length} ${tasks.length === 1 ? "task" : "tasks"}`;
+
+  return (
+    <section
+      className="task-section sleeping-section"
+      aria-labelledby="sleeping-heading"
+    >
+      <h2 id="sleeping-heading">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls="sleeping-tasks"
+          onClick={onToggle}
+        >
+          <span>Sleeping</span>
+          <span className="section-count" aria-label={countLabel}>
+            {tasks.length}
+          </span>
+          <span className="section-chevron" aria-hidden="true" />
+        </button>
+      </h2>
+      {expanded ? (
+        <div id="sleeping-tasks">
+          {tasks.length === 0 ? (
+            <p className="section-empty">{emptyMessage}</p>
+          ) : (
+            <ul className="task-list">
+              {tasks.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  isCompleting={completingTaskIds.has(task.id)}
+                  isCompletionDisabled={completionDisabledTaskIds.has(task.id)}
+                  onComplete={onComplete}
+                  onEdit={onEdit}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -450,7 +521,7 @@ function TaskEditor({
   const lastCompleted =
     task && dependencies
       ? task.lastCompletedAt
-        ? dateInTimeZone(new Date(task.lastCompletedAt), dependencies.timeZone)
+        ? formatTaskDate(task.lastCompletedAt, dependencies.timeZone)
         : "Never"
       : null;
   const today = dependencies
@@ -519,7 +590,7 @@ function TaskEditor({
 
           <label className="form-field">
             <span>
-              Target interval <small>days</small>
+              Show again after <small>days</small>
             </span>
             <input
               type="number"
@@ -577,10 +648,10 @@ function TaskEditor({
 
           {editor.mode === "create" ? (
             <details className="advanced-fields">
-              <summary>Previous completion</summary>
+              <summary>Previously completed</summary>
               <label className="form-field">
                 <span>
-                  Last completed <small>optional</small>
+                  Last done <small>optional</small>
                 </span>
                 <input
                   type="date"
@@ -605,48 +676,51 @@ function TaskEditor({
               </label>
             </details>
           ) : (
-            <details
-              className="advanced-fields"
-              open={Boolean(task?.snoozedUntil)}
-            >
-              <summary>Snooze</summary>
-              <p className="completion-context">
-                Last completed: {lastCompleted ?? "Loading…"}
-              </p>
-              <label className="form-field">
-                <span>
-                  Hide from Ready until <small>optional</small>
-                </span>
-                <input
-                  type="date"
-                  value={snoozedUntil}
-                  onChange={(event) =>
-                    setField("snoozedUntil", event.target.value)
-                  }
-                  min={today ? addCalendarDays(today, 1) : undefined}
-                  aria-invalid={Boolean(errors.snoozedUntil)}
-                  aria-describedby={
-                    errors.snoozedUntil
-                      ? "snooze-date-error"
-                      : "date-timezone-help"
-                  }
-                  disabled={isBusy || dependencyState !== "ready"}
-                />
-                {errors.snoozedUntil ? (
-                  <small id="snooze-date-error">{errors.snoozedUntil}</small>
+            <div className="edit-task-context">
+              <div className="last-done-context">
+                <span>Last done</span>
+                <strong>{lastCompleted ?? "Loading…"}</strong>
+              </div>
+              <section
+                className="snooze-fields"
+                aria-labelledby="snooze-heading"
+              >
+                <h3 id="snooze-heading">Snooze</h3>
+                <label className="form-field">
+                  <span>
+                    Snooze until <small>optional</small>
+                  </span>
+                  <input
+                    type="date"
+                    value={snoozedUntil}
+                    onChange={(event) =>
+                      setField("snoozedUntil", event.target.value)
+                    }
+                    min={today ? addCalendarDays(today, 1) : undefined}
+                    aria-invalid={Boolean(errors.snoozedUntil)}
+                    aria-describedby={
+                      errors.snoozedUntil
+                        ? "snooze-date-error"
+                        : "date-timezone-help"
+                    }
+                    disabled={isBusy || dependencyState !== "ready"}
+                  />
+                  {errors.snoozedUntil ? (
+                    <small id="snooze-date-error">{errors.snoozedUntil}</small>
+                  ) : null}
+                </label>
+                {snoozedUntil ? (
+                  <button
+                    type="button"
+                    className="text-button"
+                    onClick={() => setField("snoozedUntil", "")}
+                    disabled={isBusy}
+                  >
+                    Clear snooze
+                  </button>
                 ) : null}
-              </label>
-              {snoozedUntil ? (
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() => setField("snoozedUntil", "")}
-                  disabled={isBusy}
-                >
-                  Clear snooze
-                </button>
-              ) : null}
-            </details>
+              </section>
+            </div>
           )}
 
           {dependencies ? (
@@ -698,7 +772,7 @@ function TaskEditor({
             {confirmArchive ? (
               <div role="alert">
                 <p>
-                  Archive “{task.name}”? It will leave the Task view, but its
+                  Archive “{task.name}”? It will leave Ready and Browse, but its
                   completion history will be kept.
                 </p>
                 <div className="archive-actions">
@@ -988,17 +1062,14 @@ function TaskSearchDialog({
   );
 }
 
-function NavigationLinks({ onNavigate }: { onNavigate: () => void }) {
+function NavigationLinks() {
   return (
     <>
-      <NavLink to="/" end onClick={onNavigate}>
-        Task view
+      <NavLink to="/" end>
+        Ready
       </NavLink>
-      <NavLink to="/categories" end onClick={onNavigate}>
-        Category view
-      </NavLink>
-      <NavLink to="/categories/manage" onClick={onNavigate}>
-        Manage categories
+      <NavLink to="/categories" end>
+        Browse
       </NavLink>
     </>
   );
@@ -1032,15 +1103,13 @@ function AppNavigation({
   onSearch: (trigger: HTMLButtonElement) => void;
 }) {
   const location = useLocation();
-  const menuRef = useRef<HTMLDetailsElement>(null);
   const categoryView = location.pathname === "/categories";
   const manageCategories = location.pathname === "/categories/manage";
-  const closeMenu = () => menuRef.current?.removeAttribute("open");
   const viewLabel = manageCategories
     ? "Manage categories"
     : categoryView
-      ? "Category view"
-      : "Task view";
+      ? "Browse"
+      : "Ready";
   const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform)
     ? "⌘K"
     : "Ctrl K";
@@ -1062,19 +1131,12 @@ function AppNavigation({
           <kbd aria-hidden="true">{shortcutLabel}</kbd>
         </button>
         <nav className="desktop-navigation" aria-label="Primary navigation">
-          <NavigationLinks onNavigate={closeMenu} />
+          <NavigationLinks />
         </nav>
-        <details ref={menuRef} className="mobile-navigation">
-          <summary aria-label="Open navigation menu">
-            <span aria-hidden="true" />
-            <span aria-hidden="true" />
-            <span aria-hidden="true" />
-          </summary>
-          <nav aria-label="Primary navigation">
-            <NavigationLinks onNavigate={closeMenu} />
-          </nav>
-        </details>
       </div>
+      <nav className="mobile-navigation" aria-label="Primary navigation">
+        <NavigationLinks />
+      </nav>
     </header>
   );
 }
@@ -1083,6 +1145,7 @@ interface CategoryGroup {
   key: string;
   name: string;
   tasks: TaskResponse[];
+  readyCount: number;
 }
 
 function readCollapsedCategories() {
@@ -1097,6 +1160,14 @@ function readCollapsedCategories() {
     );
   } catch {
     return new Set<string>();
+  }
+}
+
+function readSleepingExpanded() {
+  try {
+    return window.localStorage.getItem(SLEEPING_EXPANDED_KEY) === "true";
+  } catch {
+    return false;
   }
 }
 
@@ -1124,7 +1195,12 @@ function CategorySection({
   const sectionRef = useRef<HTMLElement>(null);
   const headingId = `category-${group.key}-heading`;
   const listId = `category-${group.key}-tasks`;
-  const countLabel = `${group.tasks.length} ${group.tasks.length === 1 ? "task" : "tasks"}`;
+  const totalLabel = `${group.tasks.length} ${group.tasks.length === 1 ? "task" : "tasks"}`;
+  const readyLabel = `${group.readyCount} ready`;
+  const firstSleepingIndex = group.tasks.findIndex(
+    (task) => !task.isSnoozed && task.state === "sleeping",
+  );
+  const showLaterDivider = group.readyCount > 0 && firstSleepingIndex >= 0;
 
   useLayoutEffect(() => {
     const section = sectionRef.current;
@@ -1161,25 +1237,35 @@ function CategorySection({
           onClick={() => onToggle(group.key)}
         >
           <span className="category-heading-name">{group.name}</span>
-          <span className="category-count" aria-label={countLabel}>
-            {group.tasks.length}
+          <span
+            className="category-summary"
+            aria-label={`${readyLabel}, ${totalLabel}`}
+          >
+            {readyLabel} <span aria-hidden="true">·</span> {group.tasks.length}{" "}
+            total
           </span>
           <span className="category-chevron" aria-hidden="true" />
         </button>
       </h2>
       {!collapsed ? (
         <ul id={listId} className="task-list">
-          {group.tasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              isCompleting={completingTaskIds.has(task.id)}
-              isCompletionDisabled={completionDisabledTaskIds.has(task.id)}
-              onComplete={onComplete}
-              onEdit={onEdit}
-              showCategory={false}
-              timeZone={timeZone}
-            />
+          {group.tasks.map((task, index) => (
+            <Fragment key={task.id}>
+              {showLaterDivider && index === firstSleepingIndex ? (
+                <li className="browse-divider">
+                  <span>Later</span>
+                </li>
+              ) : null}
+              <TaskRow
+                task={task}
+                isCompleting={completingTaskIds.has(task.id)}
+                isCompletionDisabled={completionDisabledTaskIds.has(task.id)}
+                onComplete={onComplete}
+                onEdit={onEdit}
+                showCategory={false}
+                timeZone={timeZone}
+              />
+            </Fragment>
           ))}
         </ul>
       ) : null}
@@ -1240,6 +1326,8 @@ function CategoryView({
             key: String(category.id),
             name: category.name,
             tasks: groupedTasks.sort(compareCategoryTasks),
+            readyCount: groupedTasks.filter((task) => task.visibleInReady)
+              .length,
           },
         ]
       : [];
@@ -1249,6 +1337,8 @@ function CategoryView({
       key: "uncategorized",
       name: "Uncategorized",
       tasks: uncategorizedTasks.sort(compareCategoryTasks),
+      readyCount: uncategorizedTasks.filter((task) => task.visibleInReady)
+        .length,
     });
   }
 
@@ -1270,11 +1360,11 @@ function CategoryView({
   }
 
   return (
-    <main className="task-page" aria-labelledby="category-view-title">
+    <main className="task-page" aria-labelledby="browse-view-title">
       <div className="page-intro">
         <div>
-          <p className="eyebrow">Tasks grouped by where they belong</p>
-          <h1 id="category-view-title">Categories</h1>
+          <p className="eyebrow">Every active task, grouped by category</p>
+          <h1 id="browse-view-title">Browse</h1>
         </div>
         <div className="page-actions">
           <NavLink className="page-action" to="/categories/manage">
@@ -1777,7 +1867,9 @@ export function App() {
   const [loadState, setLoadState] = useState<LoadState>("loading");
   const [loadAttempt, setLoadAttempt] = useState(0);
   const [readyTasks, setReadyTasks] = useState<TaskResponse[]>([]);
-  const [upcomingTasks, setUpcomingTasks] = useState<TaskResponse[]>([]);
+  const [sleepingTasks, setSleepingTasks] = useState<TaskResponse[]>([]);
+  const [sleepingExpanded, setSleepingExpanded] =
+    useState(readSleepingExpanded);
   const [categoryLoadState, setCategoryLoadState] =
     useState<DependencyState>("idle");
   const [categoryLoadAttempt, setCategoryLoadAttempt] = useState(0);
@@ -1865,7 +1957,7 @@ export function App() {
       try {
         const taskView = await fetchTaskView(abortController.signal);
         setReadyTasks(taskView.ready);
-        setUpcomingTasks(taskView.upcoming);
+        setSleepingTasks(taskView.sleeping);
         setLoadState("ready");
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError"))
@@ -2024,10 +2116,10 @@ export function App() {
         ? [...remaining, task].sort(compareReady)
         : remaining;
     });
-    setUpcomingTasks((current) => {
+    setSleepingTasks((current) => {
       const remaining = current.filter((item) => item.id !== task.id);
       return task.archivedAt === null && task.state === "sleeping"
-        ? [...remaining, task].sort(compareUpcoming)
+        ? [...remaining, task].sort(compareSleeping)
         : remaining;
     });
     if (categoryLoadState === "ready") {
@@ -2061,7 +2153,7 @@ export function App() {
           : task,
       );
     setReadyTasks(update);
-    setUpcomingTasks(update);
+    setSleepingTasks(update);
     setCategoryTasks(update);
     setSearchTasks((current) => (current === null ? current : update(current)));
   }
@@ -2146,7 +2238,19 @@ export function App() {
     }
   }
 
-  const hasNoTasks = readyTasks.length === 0 && upcomingTasks.length === 0;
+  const hasNoTasks = readyTasks.length === 0 && sleepingTasks.length === 0;
+
+  function toggleSleeping() {
+    setSleepingExpanded((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(SLEEPING_EXPANDED_KEY, String(next));
+      } catch {
+        // The in-memory state still works when storage is unavailable.
+      }
+      return next;
+    });
+  }
 
   return (
     <div className="app-shell">
@@ -2160,13 +2264,16 @@ export function App() {
           <Route
             path="/"
             element={
-              <main className="task-page" aria-labelledby="task-view-title">
+              <main
+                className="task-page ready-page"
+                aria-labelledby="ready-view-title"
+              >
                 <div className="page-intro">
                   <div>
                     <p className="eyebrow">
                       Recurring tasks, without deadlines
                     </p>
-                    <h1 id="task-view-title">Tasks</h1>
+                    <h1 id="ready-view-title">Ready</h1>
                   </div>
                   <AddTaskButton
                     accessibleName="New task"
@@ -2210,7 +2317,7 @@ export function App() {
                       <TaskSection
                         title="Ready"
                         tasks={readyTasks}
-                        emptyMessage="Nothing is ready."
+                        emptyMessage="Nothing is ready right now."
                         completingTaskIds={completingTaskIds}
                         completionDisabledTaskIds={completionDisabledTaskIds}
                         onComplete={(task, shouldFocusUndo) =>
@@ -2218,10 +2325,11 @@ export function App() {
                         }
                         onEdit={(task) => openEditor({ mode: "edit", task })}
                       />
-                      <TaskSection
-                        title="Upcoming"
-                        tasks={upcomingTasks}
-                        emptyMessage="No upcoming tasks."
+                      <SleepingSection
+                        tasks={sleepingTasks}
+                        emptyMessage="No tasks are sleeping."
+                        expanded={sleepingExpanded}
+                        onToggle={toggleSleeping}
                         completingTaskIds={completingTaskIds}
                         completionDisabledTaskIds={completionDisabledTaskIds}
                         onComplete={(task, shouldFocusUndo) =>
@@ -2377,7 +2485,7 @@ export function App() {
             setReadyTasks((current) =>
               current.filter((item) => item.id !== task.id),
             );
-            setUpcomingTasks((current) =>
+            setSleepingTasks((current) =>
               current.filter((item) => item.id !== task.id),
             );
             setCategoryTasks((current) =>
