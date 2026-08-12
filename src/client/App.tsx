@@ -20,11 +20,7 @@ import { AppNavigation } from "./components/AppNavigation";
 import { AddTaskButton } from "./components/TaskList";
 import { UndoStack } from "./features/completion/UndoStack";
 import { useCompletionWorkflow } from "./features/completion/useCompletionWorkflow";
-import {
-  TaskEditor,
-  type EditorDependencies,
-  type EditorState,
-} from "./features/editor/TaskEditor";
+import { TaskEditor, type EditorState } from "./features/editor/TaskEditor";
 import { TaskSearchDialog } from "./features/search/TaskSearchDialog";
 import { useTaskCollections } from "./features/tasks/useTaskCollections";
 import { BrowsePage } from "./pages/BrowsePage";
@@ -69,7 +65,7 @@ export function App() {
     useState<DependencyState>("idle");
   const [browseLoadAttempt, setBrowseLoadAttempt] = useState(0);
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
-  const [browseTimeZone, setBrowseTimeZone] = useState<string | null>(null);
+  const [appTimeZone, setAppTimeZone] = useState<string | null>(null);
   const [managementLoadState, setManagementLoadState] =
     useState<LoadState>("loading");
   const [managementLoadAttempt, setManagementLoadAttempt] = useState(0);
@@ -93,8 +89,6 @@ export function App() {
     useState<DependencyState>("idle");
   const [searchLoadAttempt, setSearchLoadAttempt] = useState(0);
   const [editor, setEditor] = useState<EditorState | null>(null);
-  const [editorDependencies, setEditorDependencies] =
-    useState<EditorDependencies | null>(null);
   const [dependencyState, setDependencyState] =
     useState<DependencyState>("idle");
   const [appearsOffline, setAppearsOffline] = useState(
@@ -103,6 +97,9 @@ export function App() {
   const [backendUnavailable, setBackendUnavailable] = useState(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const searchReturnFocusRef = useRef<HTMLElement | null>(null);
+  const editorDependencies = appTimeZone
+    ? { categories, timeZone: appTimeZone }
+    : null;
 
   useEffect(() => {
     function handleBackendStatus(event: Event) {
@@ -221,11 +218,7 @@ export function App() {
         const browseData = await fetchBrowseData(abortController.signal);
         loadBrowse(browseData.tasks);
         setCategories(browseData.categories);
-        setBrowseTimeZone(browseData.timeZone);
-        setEditorDependencies({
-          categories: browseData.categories,
-          timeZone: browseData.timeZone,
-        });
+        setAppTimeZone(browseData.timeZone);
         setDependencyState("ready");
         setBrowseLoadState("ready");
       } catch (error) {
@@ -243,9 +236,6 @@ export function App() {
     fetchCategories(abortController.signal)
       .then((categories) => {
         setCategories(categories);
-        setEditorDependencies((current) =>
-          current ? { ...current, categories } : current,
-        );
         setManagementLoadState("ready");
       })
       .catch((error: unknown) => {
@@ -259,7 +249,9 @@ export function App() {
   async function loadDependencies() {
     setDependencyState("loading");
     try {
-      setEditorDependencies(await fetchEditorDependencies());
+      const dependencies = await fetchEditorDependencies();
+      setCategories(dependencies.categories);
+      setAppTimeZone(dependencies.timeZone);
       setDependencyState("ready");
     } catch {
       setDependencyState("error");
@@ -307,9 +299,6 @@ export function App() {
 
   function storeCategories(nextCategories: CategoryResponse[]) {
     setCategories(nextCategories);
-    setEditorDependencies((current) =>
-      current ? { ...current, categories: nextCategories } : current,
-    );
   }
 
   function toggleSleeping() {
@@ -361,7 +350,7 @@ export function App() {
                 loadState={browseLoadState}
                 tasks={browseTasks}
                 categories={categories}
-                timeZone={browseTimeZone}
+                timeZone={appTimeZone}
                 completionError={completionError}
                 completingTaskIds={completingTaskIds}
                 completionDisabledTaskIds={completionDisabledTaskIds}
