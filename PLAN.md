@@ -584,176 +584,734 @@ Do not implement full offline mutation synchronisation.
 
 ---
 
-# Milestone 13 — Accessibility and interaction polish
+# Milestone 13 — Information architecture and flow cleanup
 
 **Status:** Not started
 
 ## Goal
 
-Perform a deliberate usability/accessibility pass once core behaviour is stable.
+Implement the agreed information-architecture changes so TimeSince better reflects its core product model:
 
-## Deliverables
+> Tasks should surface when they are useful to think about again, without becoming overdue obligations.
 
-Review and improve:
+This milestone is primarily about **what the app prioritises and how users move through it**, not visual polish.
 
-- semantic markup;
-- keyboard navigation;
-- focus management;
-- focus visibility;
-- touch target sizes;
-- dialog behaviour;
-- screen-reader labels;
-- contrast;
-- reduced-motion behaviour;
+---
+
+## 1. Rename the primary views
+
+Replace the current user-facing concepts:
+
+- `Task view` → **Ready**
+- `Category view` → **Browse**
+
+Use these names consistently in:
+
+- mobile navigation;
+- desktop/sidebar navigation;
+- page headings;
+- route labels;
 - empty states;
-- loading/error presentation;
-- accidental-completion resistance.
+- documentation where appropriate.
 
-## Acceptance criteria
+The underlying routes may remain unchanged unless there is a clear reason to rename them.
 
-Core workflows can be completed using keyboard alone on desktop.
-
-Interactive controls have accessible names and visible focus states.
-
-No important state relies on colour alone.
-
-Mobile touch targets are appropriately sized.
+Search remains a global utility rather than a primary view.
 
 ---
 
-# Milestone 14 — Production deployment
+## 2. Rework the Ready view
+
+The Ready view should become the clear default action surface.
+
+### Ready tasks
+
+- Keep Ready tasks at the top.
+- Preserve the current oldest-first ordering.
+- Keep one-tap completion, optimistic movement, and Undo unchanged.
+- Preserve direct task editing from the row.
+
+### Sleeping tasks
+
+Sleeping tasks should no longer receive equal prominence.
+
+Replace the current equally weighted Ready/Upcoming presentation with a secondary Sleeping section.
+
+Recommended behaviour:
+
+- label the section **Sleeping** rather than Upcoming;
+- show its task count;
+- collapse it by default;
+- allow the user to expand it when they want to inspect sleeping tasks;
+- preserve the expanded/collapsed state for the session or locally if straightforward;
+- do not show countdown or urgency language;
+- continue showing elapsed time and target context using the existing task-row presentation.
+
+On wide desktop layouts, do not show Ready and Sleeping as equal side-by-side columns. Keep Ready as the dominant surface and Sleeping secondary.
+
+### Empty Ready state
+
+When no tasks are Ready, use positive/calm copy such as:
+
+> Nothing is ready right now.
+
+The UI should communicate that this is a desirable state, not an empty todo list that needs filling.
+
+Sleeping tasks should remain accessible beneath it.
+
+---
+
+## 3. Rework the Browse view
+
+Browse remains the complete active-task reference view, grouped by category.
+
+### Category sections
+
+Keep the existing category cards/sections and collapse behaviour.
+
+Enhance each category heading with useful summary information, for example:
+
+    Kitchen
+    2 ready · 6 total
+
+Use active tasks only.
+
+### Task ordering within categories
+
+Order tasks within each category as:
+
+1. non-snoozed Ready tasks;
+2. non-snoozed Sleeping tasks;
+3. snoozed tasks.
+
+Within the relevant groups, retain existing deterministic ordering.
+
+### Ready vs Sleeping presentation
+
+Do not add `Ready` or `Sleeping` labels to every task row.
+
+Instead, where both types exist in a category, visually separate sleeping tasks with a subtle group divider such as:
+
+> Later
+
+The category should therefore read naturally as:
+
+    Kitchen
+    2 ready · 6 total
+
+    [Ready task]
+    [Ready task]
+
+    Later
+
+    [Sleeping task]
+    [Sleeping task]
+
+If a category contains only one state, omit unnecessary dividers.
+
+### Snoozed tasks
+
+Keep snoozed tasks visible in Browse.
+
+Continue showing neutral `Snoozed until …` context.
+
+Do not treat snoozed tasks as overdue, warnings, or errors.
+
+### Uncategorized
+
+Keep Uncategorized last and show it only when needed.
+
+---
+
+## 4. Simplify primary navigation
+
+`Manage categories` should no longer be a primary navigation destination.
+
+Primary navigation should contain only:
+
+- Ready
+- Browse
+
+Search remains globally available.
+
+Category management should instead be reachable from Browse through the existing contextual Manage action.
+
+### Mobile navigation
+
+Replace the hamburger-based primary navigation with a simpler persistent two-destination navigation pattern if it works cleanly with the existing layout.
+
+Preferred direction:
+
+- bottom navigation with **Ready** and **Browse**;
+- Search remains available in the header;
+- floating New Task action remains available.
+
+If bottom navigation introduces substantial layout or PWA-safe-area complexity, a similarly direct two-destination alternative is acceptable, but do not retain a hamburger solely because it already exists.
+
+### Desktop navigation
+
+Keep the persistent sidebar, but reduce its primary navigation to:
+
+- Ready
+- Browse
+- Search action
+
+Keep category management contextual to Browse rather than primary.
+
+---
+
+## 5. Improve task creation terminology and flow
+
+Keep the existing sheet/panel and `Create another task` workflow.
+
+### Target interval
+
+Replace technical wording such as:
+
+> Target interval
+
+with more user-facing wording such as:
+
+> Show again after
+
+Example:
+
+    Show again after
+    [ 14 ] days
+
+The stored data model remains unchanged.
+
+### Previous completion
+
+Keep previous completion optional and visually secondary.
+
+Prefer wording such as:
+
+> Last done
+
+or:
+
+> Previously completed
+
+rather than terminology that resembles scheduling.
+
+Do not make this field more prominent than the normal create flow.
+
+### Category creation
+
+Add lightweight inline category creation from the task editor if it can be implemented without turning the selector into a complex custom component.
+
+Preferred interaction:
+
+- category selector contains an `Add category…` option or nearby action;
+- user can create a category without closing the task editor;
+- the newly created category becomes selected immediately;
+- the full Manage Categories page remains available for rename/reorder/delete.
+
+Do not duplicate the whole category-management UI inside the task editor.
+
+---
+
+## 6. Improve task editing
+
+Keep the existing mobile sheet / desktop side-panel editor.
+
+### Last completed
+
+Show the latest completion date as normal read-only context when editing a completed task.
+
+Do not hide it inside a snooze/advanced section.
+
+Use calm wording such as:
+
+> Last done: 8 August
+
+Never display `due`, `late`, or `overdue` language.
+
+### Snooze
+
+Make Snooze easier to discover than it currently is.
+
+It should remain secondary to normal editing, but it should not feel like obscure advanced metadata.
+
+Preferred structure:
+
+    Snooze
+    [ Snooze until… ]
+
+    Last done
+    8 August
+
+Keep:
+
+- date-only semantics;
+- `Clear snooze`;
+- existing timezone behaviour.
+
+### Archive
+
+Keep Archive separated from normal fields in a secondary/destructive area.
+
+Retain confirmation.
+
+Archive restoration remains Milestone 16 and should not be added here.
+
+---
+
+## 7. Preserve the completion workflow
+
+Do not redesign completion.
+
+Keep:
+
+- separate completion control;
+- one-tap completion;
+- optimistic movement;
+- exact-ID Undo;
+- five-second Undo lifetime;
+- same behaviour from Ready, Browse, and Search.
+
+Only make structural changes required by the new Ready/Sleeping presentation.
+
+---
+
+## 8. Search
+
+Do not redesign global search.
+
+Keep:
+
+- Cmd/Ctrl-K;
+- visible mobile/desktop Search action;
+- flat fuzzy-ranked results;
+- direct completion;
+- result-body editing.
+
+Update user-facing terminology only where Search references old Task/Category view names.
+
+---
+
+## 9. Remove obsolete or temporary UI
+
+During implementation, remove:
+
+- temporary QA/test copy;
+- duplicated `Task view` / `Tasks` hierarchy;
+- obsolete navigation code caused by the new Ready/Browse structure;
+- now-unused responsive styles related to the old equal Ready/Upcoming desktop layout.
+
+Do not perform broader architectural refactoring in this milestone; that belongs to Milestone 14.
+
+---
+
+## 10. Testing
+
+Keep automated frontend testing light-touch.
+
+Update/add focused tests for:
+
+- Ready/Sleeping presentation;
+- Sleeping collapsed by default;
+- expanding Sleeping;
+- Ready empty state;
+- Browse Ready/Later grouping;
+- category Ready/total summaries;
+- navigation changes;
+- inline category creation if implemented;
+- task editor Last done / Snooze changes.
+
+Do not add visual snapshots or exhaustive responsive-layout tests.
+
+Run the full repository validation suite.
+
+---
+
+## 11. Manual QA
+
+Verify at representative mobile and desktop widths.
+
+### Ready
+
+- Ready tasks dominate the page.
+- Sleeping starts collapsed.
+- Expanding/collapsing Sleeping feels natural.
+- No Ready tasks produces a positive/neutral empty state.
+- Completing a Ready task moves it correctly.
+- Undo restores it.
+
+### Browse
+
+- Ready tasks appear before Later tasks.
+- Category summaries are accurate.
+- Snoozed tasks remain discoverable.
+- Uncategorized behaves correctly.
+- Collapsed category state still works.
+
+### Navigation
+
+- Ready/Browse are obvious primary destinations.
+- Manage Categories is still easy to find from Browse.
+- Search remains easy to access.
+- Mobile navigation does not conflict with the floating New Task button or PWA safe areas.
+
+### Create/edit
+
+- Repeated creation remains fast.
+- Target wording is clear.
+- Inline category creation is efficient.
+- Last done is visible when editing.
+- Snooze is easy to find.
+- Archive remains clearly secondary.
+
+---
+
+## Acceptance criteria
+
+- Ready is clearly the app's primary action surface.
+- Sleeping tasks are accessible but visually secondary.
+- Browse works as the complete active-task reference view.
+- Category headers communicate Ready/total counts.
+- Ready/Sleeping distinction is understandable without status labels on every row.
+- Primary navigation is centred on Ready and Browse.
+- Manage Categories is contextual rather than primary.
+- Task creation/editing terminology is less technical.
+- Completion and Search behaviour remain unchanged.
+- No due/overdue framing is introduced.
+- No broad code refactor is performed beyond what is necessary for these product changes.
+- Full validation passes and manual QA confirms the revised flows feel coherent.
+
+
+---
+
+# Milestone 14 — Code refactor
 
 **Status:** Not started
 
 ## Goal
 
-Deploy TimeSince to the Wyse 5070 and make it privately available through Tailscale.
+Improve maintainability after the information-architecture changes have stabilised.
 
-## Deliverables
-
-- production build process;
-- service/process management;
-- SQLite production location;
-- migration procedure;
-- Tailscale HTTPS/private access;
-- deployment documentation;
-- restart/recovery procedure.
-
-Choose either systemd or Docker Compose based on whichever produces the simpler operational setup.
-
-## Acceptance criteria
-
-- TimeSince survives host/application restarts;
-- only intended tailnet users can reach it;
-- the SQLite database persists across deployments;
-- migrations can be applied repeatably;
-- logs are available for diagnosis;
-- the app works from both phone and desktop over Tailscale.
-
-Do not expose the application publicly.
-
----
-
-# Milestone 15 — Backups and restore
-
-**Status:** Not started
-
-## Goal
-
-Ensure the application can be recovered without losing task history.
-
-## Deliverables
-
-- automated SQLite-consistent backups;
-- retention policy;
-- off-host copy;
-- documented restore procedure;
-- pre-migration backup procedure for risky migrations.
-
-## Acceptance criteria
-
-- backups run automatically;
-- several historical backups are retained;
-- at least one copy exists off the Wyse;
-- a backup can be restored into a clean instance successfully;
-- the restore process is documented and tested.
-
----
-
-# Milestone 16 — v1 release review
-
-**Status:** Not started
-
-## Goal
-
-Review TimeSince as a complete product before treating v1 as finished.
+Refactor only where the existing structure materially increases complexity, duplication, or risk. Do not perform broad stylistic rewrites merely to make the code look cleaner.
 
 ## Review areas
 
-### Product
+- size and responsibilities of `App.tsx`;
+- route/view component boundaries;
+- shared task-row and task-editor behaviour;
+- task mutation/reconciliation logic;
+- search state and task-cache synchronisation;
+- category data loading and reconciliation;
+- duplicated state or derived presentation logic;
+- shared page/navigation components;
+- boundaries between client API helpers, view state, and reusable domain logic.
 
-Confirm that the app:
+## Deliverables
 
-- feels centred on "time since last done";
-- contains no due/overdue framing;
-- makes completion quick;
-- does not punish tasks that exceed their target;
-- works comfortably on mobile;
-- is efficient for bulk editing on desktop.
+Where justified:
 
-### Functional
+- extract major view components;
+- centralise shared task reconciliation/mutation behaviour;
+- simplify cross-view state synchronisation;
+- remove obsolete code left behind by earlier milestones;
+- improve naming and module boundaries;
+- update tests only where behaviour-preserving refactors need protection.
 
-Verify:
+Do not:
 
-- task creation/editing;
-- completion;
-- undo;
-- snooze;
-- categories;
-- category management;
-- Ready/Upcoming behaviour;
-- search/filtering;
-- completion history persistence.
+- change product behaviour intentionally;
+- replace working libraries/frameworks without a concrete benefit;
+- introduce a global state-management framework solely for architectural neatness;
+- increase frontend test coverage for its own sake.
 
-### Technical
+## Acceptance criteria
 
-Verify:
+- Observable product behaviour remains unchanged.
+- Existing validation suite passes.
+- Major components/modules have clearer responsibilities than before.
+- Cross-view mutation/reconciliation behaviour is easier to understand and extend.
+- No speculative abstractions are added for unplanned future features.
+- The resulting diff is explainable in terms of concrete maintainability gains.
 
-- tests;
-- typecheck;
-- lint;
-- production build;
-- migrations;
-- deployment;
-- backups;
-- restore.
+---
 
-### Documentation
+# Milestone 15 — Visual polish
 
-Update:
+**Status:** Not started
 
-- `PRODUCT_SPEC.md` if product decisions changed;
-- `TECH_SPEC.md` if architecture changed;
-- `AGENTS.md` with final development commands/conventions;
-- this file with completed statuses.
+## Goal
+
+Improve the visual quality and interaction feel of TimeSince once the information architecture and code structure are stable.
+
+The target is calm, crisp, lightweight, and intentional rather than decorative.
+
+## Review areas
+
+### Typography and hierarchy
+
+Review:
+
+- page titles and secondary labels;
+- elapsed-time prominence;
+- target-interval context;
+- category headers;
+- small-text legibility;
+- consistency between mobile and desktop.
+
+### Spacing and layout
+
+Review:
+
+- task-row density;
+- whitespace;
+- toolbar alignment;
+- card/group spacing;
+- modal/sheet/panel padding;
+- wide-screen balance.
+
+### Colour and surface treatment
+
+Review:
+
+- green/neutral palette;
+- contrast and legibility where visually weak;
+- borders, shadows, and card backgrounds;
+- focus/hover/pressed states;
+- selected/active navigation treatment.
+
+This is not a formal accessibility milestone, but obvious readability or interaction-quality problems should still be corrected when encountered.
+
+### Motion and feedback
+
+Add restrained motion only where it improves comprehension, for example:
+
+- task completion/removal;
+- Undo feedback;
+- accordion expansion/collapse;
+- drawer/panel transitions;
+- toast appearance/removal;
+- hover/pressed states.
+
+Respect existing reduced-motion handling.
+
+### Empty/loading/error states
+
+Ensure these feel intentional and consistent across:
+
+- Ready;
+- Browse;
+- Search;
+- Category management;
+- editor workflows.
+
+### Branding
+
+Review:
+
+- TimeSince wordmark/mark;
+- PWA icon consistency;
+- header/sidebar presentation.
+
+Avoid a broad redesign unless manual QA exposes a structural visual problem.
+
+## Acceptance criteria
+
+- Mobile and desktop feel like the same product.
+- Visual hierarchy makes the most important information immediately scannable.
+- Motion is restrained and informative.
+- No interaction becomes slower or more cumbersome for aesthetic reasons.
+- Empty/loading/error states are consistent and calm.
+- No temporary QA/debug presentation remains.
+- Full validation suite passes and manual QA covers representative phone, tablet, and desktop widths.
+
+---
+
+# Milestone 16 — Archived task management
+
+**Status:** Not started
+
+## Goal
+
+Complete the existing archive lifecycle by making archived tasks discoverable and recoverable through the UI.
+
+Archiving should mean "remove from normal use while preserving history", not irreversible deletion.
+
+## Deliverables
+
+Add a secondary archived-task management surface reachable from an appropriate management/browse location.
+
+Support:
+
+- listing archived tasks;
+- useful identifying context such as category and last completion;
+- opening archived task details in a read-only form where appropriate;
+- restoring an archived task;
+- preserving category, target interval, snooze data, and completion history when restored.
+
+Archived tasks must remain excluded from normal Ready, Browse, and global Search results unless explicitly being managed.
+
+Do not add permanent deletion unless separately specified.
+
+## Acceptance criteria
+
+- Archived tasks can be found without appearing in normal task workflows.
+- An archived task can be restored through the UI.
+- Restored tasks re-enter the appropriate active view according to their current derived state.
+- Completion history is preserved.
+- Restore requires no destructive confirmation.
+- Existing archive behaviour remains deliberate and recoverable.
+- Automated frontend coverage remains light-touch and focused on restore/reconciliation behaviour.
+
+---
+
+# Milestone 17 — Historical completion ("Done earlier")
+
+**Status:** Not started
+
+## Goal
+
+Allow the user to record that a task was completed on an earlier local calendar date when they forgot to mark it done at the time.
+
+This is a correction/convenience feature, not a scheduling feature.
+
+## Product behaviour
+
+Provide a lightweight way to choose a previous completion date for an existing task.
+
+Potential entry points may include:
+
+- a secondary action near Complete;
+- the task editor;
+- another compact action chosen during planning.
+
+The implementation should preserve the normal one-tap "Done now" path as the dominant completion workflow.
+
+## Deliverables
+
+Support:
+
+- choosing a previous local calendar date;
+- creating a completion at the correct instant/date according to the configured application timezone;
+- recalculating task state from the resulting completion history;
+- reconciling Ready/Browse/Search views;
+- Undo or correction behaviour where appropriate;
+- clear wording that distinguishes historical completion from snoozing or editing the target interval.
+
+Do not:
+
+- introduce due dates;
+- turn the task editor into a completion-history editor;
+- add complex arbitrary timestamp input unless required.
+
+## Acceptance criteria
+
+- The user can record a task as completed on an earlier calendar day.
+- Future dates are rejected.
+- Existing completion history remains intact.
+- Derived elapsed time reflects the historical completion correctly.
+- "Done now" remains a one-tap action.
+- The UI does not confuse historical completion with lateness, deadlines, or snoozing.
+
+---
+
+# Milestone 18 — Alpha deployment
+
+## Goal
+
+Deploy TimeSince as a private personal application so it can be used with real tasks and real workflows.
+
+This is an alpha deployment intended to enable product feedback, not a final release.
+
+## Deliverables
+
+### Host deployment
+
+Deploy to the Wyse 5070:
+
+- production Node application;
+- persistent SQLite database;
+- migration procedure;
+- process supervision/restart behaviour;
+- environment configuration;
+- update procedure.
+
+Choose systemd or Docker Compose based on whichever produces the simplest reliable setup.
+
+### Tailscale access
+
+Configure:
+
+- private tailnet access;
+- HTTPS suitable for browser/PWA use;
+- access from desktop and mobile devices;
+- no public exposure.
+
+### Basic operational safety
+
+Implement:
+
+- automated database backups;
+- sensible backup retention;
+- documented restore process;
+- pre-migration backups where appropriate.
+
+### PWA validation
+
+Verify on the production origin:
+
+- app installation where supported;
+- standalone launch;
+- manifest/icons;
+- service worker lifecycle;
+- app-shell behaviour;
+- update behaviour.
+
+## Acceptance criteria
+
+- TimeSince survives application and host restarts.
+- SQLite data persists across updates.
+- Migrations can be applied deliberately.
+- The app is accessible from intended devices.
+- The app is not publicly exposed.
+- Backups run automatically.
+- A backup can be restored successfully.
+- Updates can be deployed without losing data.
+- The app is ready for regular personal use.
+
+---
+
+# Post-deployment iteration
+
+After using TimeSince regularly, create future milestones based on observed friction rather than speculation.
+
+Focus on:
+
+- workflows that feel awkward;
+- missing features that repeatedly cause problems;
+- whether Ready/Browse separation works;
+- whether task intervals feel natural;
+- whether categories remain useful;
+- whether completion history needs improvement.
+
+Avoid adding features without evidence from actual usage.
 
 ---
 
 # Future work
 
-Do not pull these into v1 unless explicitly requested.
+Do not pull these into the current roadmap unless real usage demonstrates a need.
 
-Possible later milestones:
+Possible later work includes:
 
 - tags;
 - notes;
-- completion-history UI;
+- richer completion-history UI;
 - statistics/cadence analysis;
 - notifications;
 - widgets;
-- richer sorting;
+- richer sorting/filtering;
+- true calendar-month/year recurrence;
 - offline mutation support;
 - native clients;
 - multi-user/shared household features.
 
-When future work is selected, add it here as a new milestone rather than quietly expanding an existing one.
+When future work is selected, add it as a new milestone rather than quietly expanding an existing one.
