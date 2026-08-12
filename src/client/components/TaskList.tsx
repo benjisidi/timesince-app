@@ -18,20 +18,14 @@ function TaskElapsedTime({ task }: { task: TaskResponse }) {
   }
 
   const dayLabel = task.elapsedDays === 1 ? "day" : "days";
-  const overageDayLabel = task.overageDays === 1 ? "day" : "days";
-  const accessibleLabel =
-    task.overageDays && task.overageDays > 0
-      ? `${task.elapsedDays} ${dayLabel}, ${task.overageDays} ${overageDayLabel} beyond the target`
-      : `${task.elapsedDays} ${dayLabel}`;
 
   return (
-    <span className="elapsed-primary" aria-label={accessibleLabel}>
+    <span
+      className="elapsed-primary"
+      aria-label={`${task.elapsedDays} ${dayLabel}`}
+    >
       <span aria-hidden="true">
-        {task.elapsedDays}
-        {task.overageDays !== null && task.overageDays > 0 ? (
-          <sup>+{task.overageDays}</sup>
-        ) : null}{" "}
-        {dayLabel}
+        {task.elapsedDays} {dayLabel}
       </span>
     </span>
   );

@@ -40,7 +40,6 @@ export function ReadyPage({
     <main className="task-page ready-page" aria-labelledby="ready-view-title">
       <div className="page-intro">
         <div>
-          <p className="eyebrow">Recurring tasks, without deadlines</p>
           <h1 id="ready-view-title">Ready</h1>
         </div>
         <AddTaskButton

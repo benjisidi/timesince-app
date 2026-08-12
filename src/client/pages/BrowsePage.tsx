@@ -223,7 +223,6 @@ export function BrowsePage({
     <main className="task-page" aria-labelledby="browse-view-title">
       <div className="page-intro">
         <div>
-          <p className="eyebrow">Every active task, grouped by category</p>
           <h1 id="browse-view-title">Browse</h1>
         </div>
         <div className="page-actions">

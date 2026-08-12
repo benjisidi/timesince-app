@@ -1051,7 +1051,16 @@ Do not:
 
 # Milestone 15 — Visual polish
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-12. Page-level surtitles were removed, elapsed-time rows now
+show the actual elapsed value without redundant over-target superscripts, and
+target context is more legible. Desktop Ready/Sleeping category columns now
+align consistently, Browse uses a compact labelled Later separator, and
+pressed states provide clearer interaction feedback while preserving existing
+focus, touch-target, safe-area, dialog, reduced-motion, and responsive
+behaviour. Focused workflow coverage and the full validation suite pass with
+77 tests; representative phone and desktop layouts were reviewed manually.
 
 ## Goal
 

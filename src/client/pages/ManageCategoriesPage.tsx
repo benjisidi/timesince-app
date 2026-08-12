@@ -246,7 +246,6 @@ export function ManageCategories({
     >
       <div className="page-intro">
         <div>
-          <p className="eyebrow">Organise where tasks belong</p>
           <h1 id="manage-categories-title">Manage categories</h1>
         </div>
       </div>

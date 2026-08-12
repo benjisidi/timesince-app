@@ -215,6 +215,10 @@ a:focus-visible {
   color: #245b45;
 }
 
+.mobile-navigation a:active {
+  background: #dce8e0;
+}
+
 .task-page {
   padding: 1.5rem 1rem calc(6rem + env(safe-area-inset-bottom));
 }
@@ -439,6 +443,10 @@ a:focus-visible {
   background: #f5f8f5;
 }
 
+.category-section h2 button:active {
+  background: #edf3ee;
+}
+
 .category-heading-name {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -498,6 +506,10 @@ a:focus-visible {
   background: #f5f8f5;
 }
 
+.sleeping-section h2 button:active {
+  background: #edf3ee;
+}
+
 .section-count {
   display: inline-grid;
   min-width: 1.55rem;
@@ -524,7 +536,10 @@ a:focus-visible {
 }
 
 .browse-divider {
-  padding: 0.7rem 1rem 0.45rem 3.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.6rem 1rem 0.4rem 3.6rem;
   border-top: 1px solid #d7dfd9;
   color: #748179;
   font-size: 0.7rem;
@@ -532,6 +547,13 @@ a:focus-visible {
   letter-spacing: 0.08em;
   list-style: none;
   text-transform: uppercase;
+}
+
+.browse-divider::after {
+  height: 1px;
+  flex: 1 1 auto;
+  background: #e2e8e3;
+  content: "";
 }
 
 .browse-divider + .task-row {
@@ -563,6 +585,10 @@ a:focus-visible {
 
 .task-edit-control:hover {
   background: #f5f8f5;
+}
+
+.task-edit-control:active {
+  background: #edf3ee;
 }
 
 .task-row + .task-row {
@@ -657,18 +683,10 @@ a:focus-visible {
   white-space: nowrap;
 }
 
-.elapsed-primary sup {
-  position: relative;
-  top: -0.08em;
-  margin-left: 0.08em;
-  color: #678074;
-  font-size: 0.63em;
-}
-
 .task-target {
   margin-top: 0.15rem;
-  color: #849088;
-  font-size: 0.64rem;
+  color: #6f7d75;
+  font-size: 0.7rem;
   line-height: 1.25;
   white-space: nowrap;
 }
@@ -765,6 +783,11 @@ a:focus-visible {
 
 .add-task-button:hover {
   background: #245b45;
+}
+
+.add-task-button:active {
+  background: #1d4c39;
+  transform: translateY(1px);
 }
 
 .undo-stack {
@@ -1308,6 +1331,10 @@ button:disabled {
     color: #245b45;
   }
 
+  .desktop-navigation a:active {
+    background: #dce8e0;
+  }
+
   .task-page {
     padding-top: 2rem;
   }
@@ -1427,6 +1454,10 @@ button:disabled {
     background: #245b45;
   }
 
+  .desktop-add-task-button:active {
+    background: #1d4c39;
+  }
+
   .desktop-add-task-button > span:first-child {
     font-size: 1.2rem;
     font-weight: 500;
@@ -1467,6 +1498,10 @@ button:disabled {
 
   .task-edit-control-with-category .task-category {
     margin-top: 0;
+  }
+
+  .task-edit-control-with-category .task-timing {
+    width: 13rem;
   }
 
   .task-timing {
@@ -1569,6 +1604,10 @@ button:disabled {
 
   .task-edit-control {
     transition: none;
+  }
+
+  .add-task-button:active {
+    transform: none;
   }
 
   .category-chevron {

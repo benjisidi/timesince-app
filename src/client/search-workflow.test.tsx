@@ -185,11 +185,7 @@ describe("Global search", () => {
       }),
     );
     await waitFor(() =>
-      expect(
-        within(searchDialog).getByLabelText(
-          "17 days, 3 days beyond the target",
-        ),
-      ).toBeTruthy(),
+      expect(within(searchDialog).getByLabelText("17 days")).toBeTruthy(),
     );
     expect(
       fetchMock.mock.calls.some(

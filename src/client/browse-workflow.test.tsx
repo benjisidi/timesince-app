@@ -200,11 +200,7 @@ describe("Browse view", () => {
         name: "Undo completion of Clean worktop",
       }),
     );
-    await waitFor(() =>
-      expect(
-        screen.getByLabelText("17 days, 3 days beyond the target"),
-      ).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByLabelText("17 days")).toBeTruthy());
     expect(screen.getByText("Clean worktop")).toBeTruthy();
   });
 });
