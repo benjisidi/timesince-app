@@ -3,41 +3,11 @@ import { NavLink } from "react-router";
 
 import type { CategoryResponse, TaskResponse } from "../../shared/api";
 import { AddTaskButton, TaskRow } from "../components/TaskList";
+import { compareBrowseTasks } from "../features/tasks/task-order";
 
 const COLLAPSED_CATEGORIES_KEY = "timesince.collapsed-categories.v1";
 const CATEGORY_GRID_ROW_PX = 8;
 const CATEGORY_GRID_GAP_PX = 24;
-
-function compareByNameAndId(first: TaskResponse, second: TaskResponse) {
-  return first.name.localeCompare(second.name) || first.id - second.id;
-}
-
-function compareReady(first: TaskResponse, second: TaskResponse) {
-  if (first.elapsedDays === null && second.elapsedDays !== null) return -1;
-  if (first.elapsedDays !== null && second.elapsedDays === null) return 1;
-  return (
-    (second.elapsedDays ?? 0) - (first.elapsedDays ?? 0) ||
-    compareByNameAndId(first, second)
-  );
-}
-
-function compareSleeping(first: TaskResponse, second: TaskResponse) {
-  return (
-    (second.elapsedDays ?? 0) - (first.elapsedDays ?? 0) ||
-    compareByNameAndId(first, second)
-  );
-}
-
-function compareCategoryTasks(first: TaskResponse, second: TaskResponse) {
-  const firstBucket = first.isSnoozed ? 2 : first.state === "ready" ? 0 : 1;
-  const secondBucket = second.isSnoozed ? 2 : second.state === "ready" ? 0 : 1;
-  if (firstBucket !== secondBucket) return firstBucket - secondBucket;
-
-  if (first.state !== second.state) return first.state === "ready" ? -1 : 1;
-  return first.state === "ready"
-    ? compareReady(first, second)
-    : compareSleeping(first, second);
-}
 
 interface CategoryGroup {
   key: string;
@@ -215,7 +185,7 @@ export function BrowsePage({
           {
             key: String(category.id),
             name: category.name,
-            tasks: groupedTasks.sort(compareCategoryTasks),
+            tasks: groupedTasks.sort(compareBrowseTasks),
             readyCount: groupedTasks.filter((task) => task.visibleInReady)
               .length,
           },
@@ -226,7 +196,7 @@ export function BrowsePage({
     groups.push({
       key: "uncategorized",
       name: "Uncategorized",
-      tasks: uncategorizedTasks.sort(compareCategoryTasks),
+      tasks: uncategorizedTasks.sort(compareBrowseTasks),
       readyCount: uncategorizedTasks.filter((task) => task.visibleInReady)
         .length,
     });

@@ -19,11 +19,11 @@ export function AppNavigation({
   onSearch: (trigger: HTMLButtonElement) => void;
 }) {
   const location = useLocation();
-  const categoryView = location.pathname === "/categories";
+  const browseRoute = location.pathname === "/categories";
   const manageCategories = location.pathname === "/categories/manage";
   const viewLabel = manageCategories
     ? "Manage categories"
-    : categoryView
+    : browseRoute
       ? "Browse"
       : "Ready";
   const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform)

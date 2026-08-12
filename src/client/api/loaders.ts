@@ -2,7 +2,7 @@ import { fetchCategories } from "./categories";
 import { fetchAppConfig } from "./config";
 import { fetchAllActiveTasks, fetchTaskList } from "./tasks";
 
-export async function fetchTaskView(signal: AbortSignal) {
+export async function fetchReadyData(signal: AbortSignal) {
   const [ready, sleeping] = await Promise.all([
     fetchTaskList("/api/tasks?state=ready&visibleInReady=true", signal),
     fetchTaskList("/api/tasks?state=sleeping", signal),
@@ -11,7 +11,7 @@ export async function fetchTaskView(signal: AbortSignal) {
   return { ready, sleeping };
 }
 
-export async function fetchCategoryView(signal: AbortSignal) {
+export async function fetchBrowseData(signal: AbortSignal) {
   const [tasks, categories, config] = await Promise.all([
     fetchAllActiveTasks(signal),
     fetchCategories(signal),

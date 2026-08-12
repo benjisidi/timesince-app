@@ -15,9 +15,9 @@ import {
   type BackendStatus,
 } from "./api/client";
 import {
-  fetchCategoryView,
+  fetchBrowseData,
   fetchEditorDependencies,
-  fetchTaskView,
+  fetchReadyData,
 } from "./api/loaders";
 import {
   completeTask,
@@ -38,6 +38,10 @@ import {
   type EditorState,
 } from "./features/editor/TaskEditor";
 import { TaskSearchDialog } from "./features/search/TaskSearchDialog";
+import {
+  compareReadyTasks,
+  compareSleepingTasks,
+} from "./features/tasks/task-order";
 import { BrowsePage } from "./pages/BrowsePage";
 import { ManageCategories } from "./pages/ManageCategoriesPage";
 import { ReadyPage } from "./pages/ReadyPage";
@@ -46,26 +50,6 @@ import { PwaStatus } from "./PwaStatus";
 type LoadState = "loading" | "ready" | "error";
 type DependencyState = "idle" | LoadState;
 const SLEEPING_EXPANDED_KEY = "timesince.sleeping-expanded.v1";
-function compareByNameAndId(first: TaskResponse, second: TaskResponse) {
-  return first.name.localeCompare(second.name) || first.id - second.id;
-}
-
-function compareReady(first: TaskResponse, second: TaskResponse) {
-  if (first.elapsedDays === null && second.elapsedDays !== null) return -1;
-  if (first.elapsedDays !== null && second.elapsedDays === null) return 1;
-  return (
-    (second.elapsedDays ?? 0) - (first.elapsedDays ?? 0) ||
-    compareByNameAndId(first, second)
-  );
-}
-
-function compareSleeping(first: TaskResponse, second: TaskResponse) {
-  return (
-    (second.elapsedDays ?? 0) - (first.elapsedDays ?? 0) ||
-    compareByNameAndId(first, second)
-  );
-}
-
 function optimisticallyCompleteTask(task: TaskResponse): TaskResponse {
   return {
     ...task,
@@ -87,20 +71,20 @@ function readSleepingExpanded() {
 
 export function App() {
   const location = useLocation();
-  const isCategoryView = location.pathname === "/categories";
+  const isBrowseRoute = location.pathname === "/categories";
   const isManageCategories = location.pathname === "/categories/manage";
-  const [loadState, setLoadState] = useState<LoadState>("loading");
-  const [loadAttempt, setLoadAttempt] = useState(0);
+  const [readyLoadState, setReadyLoadState] = useState<LoadState>("loading");
+  const [readyLoadAttempt, setReadyLoadAttempt] = useState(0);
   const [readyTasks, setReadyTasks] = useState<TaskResponse[]>([]);
   const [sleepingTasks, setSleepingTasks] = useState<TaskResponse[]>([]);
   const [sleepingExpanded, setSleepingExpanded] =
     useState(readSleepingExpanded);
-  const [categoryLoadState, setCategoryLoadState] =
+  const [browseLoadState, setBrowseLoadState] =
     useState<DependencyState>("idle");
-  const [categoryLoadAttempt, setCategoryLoadAttempt] = useState(0);
-  const [categoryTasks, setCategoryTasks] = useState<TaskResponse[]>([]);
-  const [categoryList, setCategoryList] = useState<CategoryResponse[]>([]);
-  const [categoryTimeZone, setCategoryTimeZone] = useState<string | null>(null);
+  const [browseLoadAttempt, setBrowseLoadAttempt] = useState(0);
+  const [browseTasks, setBrowseTasks] = useState<TaskResponse[]>([]);
+  const [categories, setCategories] = useState<CategoryResponse[]>([]);
+  const [browseTimeZone, setBrowseTimeZone] = useState<string | null>(null);
   const [managementLoadState, setManagementLoadState] =
     useState<LoadState>("loading");
   const [managementLoadAttempt, setManagementLoadAttempt] = useState(0);
@@ -150,9 +134,11 @@ export function App() {
 
     function handleOnline() {
       setAppearsOffline(false);
-      if (loadState === "error") setLoadAttempt((attempt) => attempt + 1);
-      if (isCategoryView && categoryLoadState === "error") {
-        setCategoryLoadAttempt((attempt) => attempt + 1);
+      if (readyLoadState === "error") {
+        setReadyLoadAttempt((attempt) => attempt + 1);
+      }
+      if (isBrowseRoute && browseLoadState === "error") {
+        setBrowseLoadAttempt((attempt) => attempt + 1);
       }
       if (isManageCategories && managementLoadState === "error") {
         setManagementLoadState("loading");
@@ -167,31 +153,31 @@ export function App() {
       window.removeEventListener("online", handleOnline);
     };
   }, [
-    categoryLoadState,
-    isCategoryView,
+    browseLoadState,
+    isBrowseRoute,
     isManageCategories,
-    loadState,
+    readyLoadState,
     managementLoadState,
   ]);
 
   useEffect(() => {
     const abortController = new AbortController();
     async function loadTasks() {
-      setLoadState("loading");
+      setReadyLoadState("loading");
       setCompletionError(null);
       try {
-        const taskView = await fetchTaskView(abortController.signal);
-        setReadyTasks(taskView.ready);
-        setSleepingTasks(taskView.sleeping);
-        setLoadState("ready");
+        const readyData = await fetchReadyData(abortController.signal);
+        setReadyTasks(readyData.ready);
+        setSleepingTasks(readyData.sleeping);
+        setReadyLoadState("ready");
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError"))
-          setLoadState("error");
+          setReadyLoadState("error");
       }
     }
     void loadTasks();
     return () => abortController.abort();
-  }, [loadAttempt]);
+  }, [readyLoadAttempt]);
 
   useEffect(() => {
     function handleSearchShortcut(event: KeyboardEvent) {
@@ -238,38 +224,38 @@ export function App() {
   }, [isSearchOpen, searchLoadAttempt, searchTasks]);
 
   useEffect(() => {
-    if (!isCategoryView) return;
+    if (!isBrowseRoute) return;
 
     const abortController = new AbortController();
-    async function loadCategories() {
-      setCategoryLoadState("loading");
+    async function loadBrowseData() {
+      setBrowseLoadState("loading");
       setCompletionError(null);
       try {
-        const categoryView = await fetchCategoryView(abortController.signal);
-        setCategoryTasks(categoryView.tasks);
-        setCategoryList(categoryView.categories);
-        setCategoryTimeZone(categoryView.timeZone);
+        const browseData = await fetchBrowseData(abortController.signal);
+        setBrowseTasks(browseData.tasks);
+        setCategories(browseData.categories);
+        setBrowseTimeZone(browseData.timeZone);
         setEditorDependencies({
-          categories: categoryView.categories,
-          timeZone: categoryView.timeZone,
+          categories: browseData.categories,
+          timeZone: browseData.timeZone,
         });
         setDependencyState("ready");
-        setCategoryLoadState("ready");
+        setBrowseLoadState("ready");
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError"))
-          setCategoryLoadState("error");
+          setBrowseLoadState("error");
       }
     }
-    void loadCategories();
+    void loadBrowseData();
     return () => abortController.abort();
-  }, [categoryLoadAttempt, isCategoryView]);
+  }, [browseLoadAttempt, isBrowseRoute]);
 
   useEffect(() => {
     if (!isManageCategories) return;
     const abortController = new AbortController();
     fetchCategories(abortController.signal)
       .then((categories) => {
-        setCategoryList(categories);
+        setCategories(categories);
         setEditorDependencies((current) =>
           current ? { ...current, categories } : current,
         );
@@ -338,17 +324,17 @@ export function App() {
       return task.archivedAt === null &&
         task.state === "ready" &&
         task.visibleInReady
-        ? [...remaining, task].sort(compareReady)
+        ? [...remaining, task].sort(compareReadyTasks)
         : remaining;
     });
     setSleepingTasks((current) => {
       const remaining = current.filter((item) => item.id !== task.id);
       return task.archivedAt === null && task.state === "sleeping"
-        ? [...remaining, task].sort(compareSleeping)
+        ? [...remaining, task].sort(compareSleepingTasks)
         : remaining;
     });
-    if (categoryLoadState === "ready") {
-      setCategoryTasks((current) => {
+    if (browseLoadState === "ready") {
+      setBrowseTasks((current) => {
         const remaining = current.filter((item) => item.id !== task.id);
         return task.archivedAt === null ? [...remaining, task] : remaining;
       });
@@ -360,10 +346,10 @@ export function App() {
     });
   }
 
-  function storeCategories(categories: CategoryResponse[]) {
-    setCategoryList(categories);
+  function storeCategories(nextCategories: CategoryResponse[]) {
+    setCategories(nextCategories);
     setEditorDependencies((current) =>
-      current ? { ...current, categories } : current,
+      current ? { ...current, categories: nextCategories } : current,
     );
   }
 
@@ -379,7 +365,7 @@ export function App() {
       );
     setReadyTasks(update);
     setSleepingTasks(update);
-    setCategoryTasks(update);
+    setBrowseTasks(update);
     setSearchTasks((current) => (current === null ? current : update(current)));
   }
 
@@ -488,14 +474,14 @@ export function App() {
             path="/"
             element={
               <ReadyPage
-                loadState={loadState}
+                loadState={readyLoadState}
                 readyTasks={readyTasks}
                 sleepingTasks={sleepingTasks}
                 sleepingExpanded={sleepingExpanded}
                 completionError={completionError}
                 completingTaskIds={completingTaskIds}
                 completionDisabledTaskIds={completionDisabledTaskIds}
-                onRetry={() => setLoadAttempt((attempt) => attempt + 1)}
+                onRetry={() => setReadyLoadAttempt((attempt) => attempt + 1)}
                 onToggleSleeping={toggleSleeping}
                 onComplete={(task, shouldFocusUndo) =>
                   void handleComplete(task, shouldFocusUndo)
@@ -509,14 +495,14 @@ export function App() {
             path="/categories"
             element={
               <BrowsePage
-                loadState={categoryLoadState}
-                tasks={categoryTasks}
-                categories={categoryList}
-                timeZone={categoryTimeZone}
+                loadState={browseLoadState}
+                tasks={browseTasks}
+                categories={categories}
+                timeZone={browseTimeZone}
                 completionError={completionError}
                 completingTaskIds={completingTaskIds}
                 completionDisabledTaskIds={completionDisabledTaskIds}
-                onRetry={() => setCategoryLoadAttempt((attempt) => attempt + 1)}
+                onRetry={() => setBrowseLoadAttempt((attempt) => attempt + 1)}
                 onComplete={(task, shouldFocusUndo) =>
                   void handleComplete(task, shouldFocusUndo)
                 }
@@ -530,7 +516,7 @@ export function App() {
             element={
               <ManageCategories
                 loadState={managementLoadState}
-                categories={categoryList}
+                categories={categories}
                 onRetry={() => {
                   setManagementLoadState("loading");
                   setManagementLoadAttempt((attempt) => attempt + 1);
@@ -538,7 +524,7 @@ export function App() {
                 onCreate={async (name) => {
                   const created = await createCategory({ name });
                   storeCategories(
-                    [...categoryList, created].sort(
+                    [...categories, created].sort(
                       (first, second) =>
                         first.position - second.position ||
                         first.id - second.id,
@@ -552,7 +538,7 @@ export function App() {
                     name: renamed.name,
                   });
                   storeCategories(
-                    categoryList.map((category) =>
+                    categories.map((category) =>
                       category.id === categoryId ? renamed : category,
                     ),
                   );
@@ -562,9 +548,8 @@ export function App() {
                 }}
                 onDelete={async (categoryId, replacementCategoryId) => {
                   const replacement =
-                    categoryList.find(
-                      ({ id }) => id === replacementCategoryId,
-                    ) ?? null;
+                    categories.find(({ id }) => id === replacementCategoryId) ??
+                    null;
                   const remainingCategories = await deleteCategory(
                     categoryId,
                     replacementCategoryId,
@@ -650,7 +635,7 @@ export function App() {
             setSleepingTasks((current) =>
               current.filter((item) => item.id !== task.id),
             );
-            setCategoryTasks((current) =>
+            setBrowseTasks((current) =>
               current.filter((item) => item.id !== task.id),
             );
             setSearchTasks(

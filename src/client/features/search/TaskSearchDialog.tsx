@@ -1,31 +1,9 @@
-import { fuzzy } from "fast-fuzzy";
 import { useEffect, useRef } from "react";
 
 import type { TaskResponse } from "../../../shared/api";
 import { TaskRow } from "../../components/TaskList";
 import { UndoStack, type UndoItem } from "../completion/UndoStack";
-
-const SEARCH_MATCH_THRESHOLD = 0.6;
-
-function rankSearchResults(tasks: TaskResponse[], query: string) {
-  const term = query.trim();
-  if (!term) return [];
-
-  return tasks
-    .map((task) => {
-      const nameScore = fuzzy(term, task.name);
-      const categoryScore = fuzzy(term, task.category?.name ?? "Uncategorized");
-      return {
-        task,
-        score: nameScore * 2 + categoryScore,
-        isRelevant:
-          Math.max(nameScore, categoryScore) >= SEARCH_MATCH_THRESHOLD,
-      };
-    })
-    .filter(({ isRelevant }) => isRelevant)
-    .sort((first, second) => second.score - first.score)
-    .map(({ task }) => task);
-}
+import { rankSearchResults } from "./task-search";
 
 interface TaskSearchDialogProps {
   loadState: "idle" | "loading" | "ready" | "error";
