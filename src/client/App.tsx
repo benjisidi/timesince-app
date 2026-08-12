@@ -38,10 +38,7 @@ import {
   type EditorState,
 } from "./features/editor/TaskEditor";
 import { TaskSearchDialog } from "./features/search/TaskSearchDialog";
-import {
-  compareReadyTasks,
-  compareSleepingTasks,
-} from "./features/tasks/task-order";
+import { useTaskCollections } from "./features/tasks/useTaskCollections";
 import { BrowsePage } from "./pages/BrowsePage";
 import { ManageCategories } from "./pages/ManageCategoriesPage";
 import { ReadyPage } from "./pages/ReadyPage";
@@ -75,14 +72,24 @@ export function App() {
   const isManageCategories = location.pathname === "/categories/manage";
   const [readyLoadState, setReadyLoadState] = useState<LoadState>("loading");
   const [readyLoadAttempt, setReadyLoadAttempt] = useState(0);
-  const [readyTasks, setReadyTasks] = useState<TaskResponse[]>([]);
-  const [sleepingTasks, setSleepingTasks] = useState<TaskResponse[]>([]);
+  const {
+    readyTasks,
+    sleepingTasks,
+    browseTasks,
+    searchTasks,
+    loadReady,
+    loadBrowse,
+    loadSearch,
+    clearSearch,
+    reconcileTask,
+    removeTask,
+    replaceCategoryReference,
+  } = useTaskCollections();
   const [sleepingExpanded, setSleepingExpanded] =
     useState(readSleepingExpanded);
   const [browseLoadState, setBrowseLoadState] =
     useState<DependencyState>("idle");
   const [browseLoadAttempt, setBrowseLoadAttempt] = useState(0);
-  const [browseTasks, setBrowseTasks] = useState<TaskResponse[]>([]);
   const [categories, setCategories] = useState<CategoryResponse[]>([]);
   const [browseTimeZone, setBrowseTimeZone] = useState<string | null>(null);
   const [managementLoadState, setManagementLoadState] =
@@ -99,7 +106,6 @@ export function App() {
   const [searchLoadState, setSearchLoadState] =
     useState<DependencyState>("idle");
   const [searchLoadAttempt, setSearchLoadAttempt] = useState(0);
-  const [searchTasks, setSearchTasks] = useState<TaskResponse[] | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [editorDependencies, setEditorDependencies] =
     useState<EditorDependencies | null>(null);
@@ -167,8 +173,7 @@ export function App() {
       setCompletionError(null);
       try {
         const readyData = await fetchReadyData(abortController.signal);
-        setReadyTasks(readyData.ready);
-        setSleepingTasks(readyData.sleeping);
+        loadReady(readyData.ready, readyData.sleeping);
         setReadyLoadState("ready");
       } catch (error) {
         if (!(error instanceof DOMException && error.name === "AbortError"))
@@ -177,7 +182,7 @@ export function App() {
     }
     void loadTasks();
     return () => abortController.abort();
-  }, [readyLoadAttempt]);
+  }, [loadReady, readyLoadAttempt]);
 
   useEffect(() => {
     function handleSearchShortcut(event: KeyboardEvent) {
@@ -209,7 +214,7 @@ export function App() {
     const abortController = new AbortController();
     fetchAllActiveTasks(abortController.signal)
       .then((tasks) => {
-        setSearchTasks(tasks);
+        loadSearch(tasks);
         setSearchLoadState("ready");
       })
       .catch((error: unknown) => {
@@ -221,7 +226,7 @@ export function App() {
       });
 
     return () => abortController.abort();
-  }, [isSearchOpen, searchLoadAttempt, searchTasks]);
+  }, [isSearchOpen, loadSearch, searchLoadAttempt, searchTasks]);
 
   useEffect(() => {
     if (!isBrowseRoute) return;
@@ -232,7 +237,7 @@ export function App() {
       setCompletionError(null);
       try {
         const browseData = await fetchBrowseData(abortController.signal);
-        setBrowseTasks(browseData.tasks);
+        loadBrowse(browseData.tasks);
         setCategories(browseData.categories);
         setBrowseTimeZone(browseData.timeZone);
         setEditorDependencies({
@@ -248,7 +253,7 @@ export function App() {
     }
     void loadBrowseData();
     return () => abortController.abort();
-  }, [browseLoadAttempt, isBrowseRoute]);
+  }, [browseLoadAttempt, isBrowseRoute, loadBrowse]);
 
   useEffect(() => {
     if (!isManageCategories) return;
@@ -318,55 +323,11 @@ export function App() {
     openEditor({ mode: "edit", task }, returnFocus);
   }
 
-  function reconcileTask(task: TaskResponse) {
-    setReadyTasks((current) => {
-      const remaining = current.filter((item) => item.id !== task.id);
-      return task.archivedAt === null &&
-        task.state === "ready" &&
-        task.visibleInReady
-        ? [...remaining, task].sort(compareReadyTasks)
-        : remaining;
-    });
-    setSleepingTasks((current) => {
-      const remaining = current.filter((item) => item.id !== task.id);
-      return task.archivedAt === null && task.state === "sleeping"
-        ? [...remaining, task].sort(compareSleepingTasks)
-        : remaining;
-    });
-    if (browseLoadState === "ready") {
-      setBrowseTasks((current) => {
-        const remaining = current.filter((item) => item.id !== task.id);
-        return task.archivedAt === null ? [...remaining, task] : remaining;
-      });
-    }
-    setSearchTasks((current) => {
-      if (current === null) return current;
-      const remaining = current.filter((item) => item.id !== task.id);
-      return task.archivedAt === null ? [...remaining, task] : remaining;
-    });
-  }
-
   function storeCategories(nextCategories: CategoryResponse[]) {
     setCategories(nextCategories);
     setEditorDependencies((current) =>
       current ? { ...current, categories: nextCategories } : current,
     );
-  }
-
-  function reconcileCategoryReference(
-    categoryId: number,
-    replacement: { id: number; name: string } | null,
-  ) {
-    const update = (tasks: TaskResponse[]) =>
-      tasks.map((task) =>
-        task.category?.id === categoryId
-          ? { ...task, category: replacement }
-          : task,
-      );
-    setReadyTasks(update);
-    setSleepingTasks(update);
-    setBrowseTasks(update);
-    setSearchTasks((current) => (current === null ? current : update(current)));
   }
 
   function focusCompletionControl(taskId: number) {
@@ -533,7 +494,7 @@ export function App() {
                 }}
                 onRename={async (categoryId, name) => {
                   const renamed = await renameCategory(categoryId, { name });
-                  reconcileCategoryReference(categoryId, {
+                  replaceCategoryReference(categoryId, {
                     id: renamed.id,
                     name: renamed.name,
                   });
@@ -554,7 +515,7 @@ export function App() {
                     categoryId,
                     replacementCategoryId,
                   );
-                  reconcileCategoryReference(
+                  replaceCategoryReference(
                     categoryId,
                     replacement
                       ? { id: replacement.id, name: replacement.name }
@@ -599,7 +560,7 @@ export function App() {
           undoItems={undoItems}
           onQueryChange={setSearchQuery}
           onRetry={() => {
-            setSearchTasks(null);
+            clearSearch();
             setSearchLoadState("idle");
             setSearchLoadAttempt((attempt) => attempt + 1);
           }}
@@ -629,19 +590,7 @@ export function App() {
             if (!keepOpen) closeEditor();
           }}
           onArchived={(task) => {
-            setReadyTasks((current) =>
-              current.filter((item) => item.id !== task.id),
-            );
-            setSleepingTasks((current) =>
-              current.filter((item) => item.id !== task.id),
-            );
-            setBrowseTasks((current) =>
-              current.filter((item) => item.id !== task.id),
-            );
-            setSearchTasks(
-              (current) =>
-                current?.filter((item) => item.id !== task.id) ?? null,
-            );
+            removeTask(task.id);
             setAnnouncement(`Archived ${task.name}.`);
             closeEditor();
           }}
