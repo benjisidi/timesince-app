@@ -987,7 +987,20 @@ Verify at representative mobile and desktop widths.
 
 # Milestone 14 — Code refactor
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-12. The client now has explicit page, shared-component,
+feature, API, and orchestration boundaries. `App.tsx` retains routing and
+top-level coordination while Ready, Browse, category management, task editing,
+Search, completion feedback, and API resources live in focused modules. A
+small reducer centralises reconciliation across the independently loaded Ready,
+Sleeping, Browse, and Search collections, and completion/exact-ID Undo is
+encapsulated in its own workflow hook. Category/configuration ownership is no
+longer duplicated, client-only ordering and Search presentation logic have
+focused tests, and frontend workflow tests are organised by feature. Routes,
+API contracts, database schema, shared task semantics, optimistic behaviour,
+Undo timing and identity, editor/Search behaviour, and PWA behaviour remain
+unchanged. The full validation suite passes with 77 tests.
 
 ## Goal
 
