@@ -16,6 +16,21 @@ export async function fetchAllActiveTasks(signal: AbortSignal) {
   return fetchTaskList("/api/tasks?state=all", signal);
 }
 
+export async function fetchArchivedTasks(signal: AbortSignal) {
+  const tasks = await fetchTaskList(
+    "/api/tasks?includeArchived=true&state=all",
+    signal,
+  );
+  return tasks
+    .filter((task) => task.archivedAt !== null)
+    .sort(
+      (first, second) =>
+        (second.archivedAt ?? "").localeCompare(first.archivedAt ?? "") ||
+        first.name.localeCompare(second.name) ||
+        first.id - second.id,
+    );
+}
+
 export async function completeTask(
   taskId: number,
 ): Promise<CompletionMutationResponse> {
@@ -71,4 +86,13 @@ export async function archiveTask(taskId: number): Promise<void> {
   if (!response.ok) {
     await readJson<never>(response);
   }
+}
+
+export async function restoreTask(taskId: number): Promise<TaskResponse> {
+  const response = await apiFetch(`/api/tasks/${taskId}/restore`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  return readJson<TaskResponse>(response);
 }

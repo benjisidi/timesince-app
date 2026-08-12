@@ -9,6 +9,8 @@ export interface TaskCollectionsState {
   browseTasks: TaskResponse[];
   browseLoaded: boolean;
   searchTasks: TaskResponse[] | null;
+  archivedTasks: TaskResponse[];
+  archivedLoaded: boolean;
 }
 
 export const initialTaskCollectionsState: TaskCollectionsState = {
@@ -17,6 +19,8 @@ export const initialTaskCollectionsState: TaskCollectionsState = {
   browseTasks: [],
   browseLoaded: false,
   searchTasks: null,
+  archivedTasks: [],
+  archivedLoaded: false,
 };
 
 export type TaskCollectionsAction =
@@ -27,6 +31,7 @@ export type TaskCollectionsAction =
     }
   | { type: "load-browse"; tasks: TaskResponse[] }
   | { type: "load-search"; tasks: TaskResponse[] }
+  | { type: "load-archived"; tasks: TaskResponse[] }
   | { type: "clear-search" }
   | { type: "reconcile-task"; task: TaskResponse }
   | { type: "remove-task"; taskId: number }
@@ -49,6 +54,24 @@ function reconcileOrderedCollection(
 function reconcileActiveCollection(tasks: TaskResponse[], task: TaskResponse) {
   const remaining = tasks.filter((item) => item.id !== task.id);
   return task.archivedAt === null ? [...remaining, task] : remaining;
+}
+
+function compareArchivedTasks(first: TaskResponse, second: TaskResponse) {
+  return (
+    (second.archivedAt ?? "").localeCompare(first.archivedAt ?? "") ||
+    first.name.localeCompare(second.name) ||
+    first.id - second.id
+  );
+}
+
+function reconcileArchivedCollection(
+  tasks: TaskResponse[],
+  task: TaskResponse,
+) {
+  const remaining = tasks.filter((item) => item.id !== task.id);
+  return task.archivedAt === null
+    ? remaining
+    : [...remaining, task].sort(compareArchivedTasks);
 }
 
 function removeTask(tasks: TaskResponse[], taskId: number) {
@@ -82,6 +105,8 @@ export function taskCollectionsReducer(
       return { ...state, browseTasks: action.tasks, browseLoaded: true };
     case "load-search":
       return { ...state, searchTasks: action.tasks };
+    case "load-archived":
+      return { ...state, archivedTasks: action.tasks, archivedLoaded: true };
     case "clear-search":
       return { ...state, searchTasks: null };
     case "reconcile-task": {
@@ -108,6 +133,9 @@ export function taskCollectionsReducer(
           state.searchTasks === null
             ? null
             : reconcileActiveCollection(state.searchTasks, task),
+        archivedTasks: state.archivedLoaded
+          ? reconcileArchivedCollection(state.archivedTasks, task)
+          : state.archivedTasks,
       };
     }
     case "remove-task":
@@ -120,6 +148,7 @@ export function taskCollectionsReducer(
           state.searchTasks === null
             ? null
             : removeTask(state.searchTasks, action.taskId),
+        archivedTasks: removeTask(state.archivedTasks, action.taskId),
       };
     case "replace-category-reference":
       return {
@@ -147,6 +176,11 @@ export function taskCollectionsReducer(
                 action.categoryId,
                 action.replacement,
               ),
+        archivedTasks: replaceCategoryReference(
+          state.archivedTasks,
+          action.categoryId,
+          action.replacement,
+        ),
       };
   }
 }
@@ -167,6 +201,9 @@ export function useTaskCollections() {
   }, []);
   const loadSearch = useCallback((tasks: TaskResponse[]) => {
     dispatch({ type: "load-search", tasks });
+  }, []);
+  const loadArchived = useCallback((tasks: TaskResponse[]) => {
+    dispatch({ type: "load-archived", tasks });
   }, []);
   const clearSearch = useCallback(() => {
     dispatch({ type: "clear-search" });
@@ -193,6 +230,7 @@ export function useTaskCollections() {
     loadReady,
     loadBrowse,
     loadSearch,
+    loadArchived,
     clearSearch,
     reconcileTask,
     removeTask,

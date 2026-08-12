@@ -1,6 +1,10 @@
 import { fetchCategories } from "./categories";
 import { fetchAppConfig } from "./config";
-import { fetchAllActiveTasks, fetchTaskList } from "./tasks";
+import {
+  fetchAllActiveTasks,
+  fetchArchivedTasks,
+  fetchTaskList,
+} from "./tasks";
 
 export async function fetchReadyData(signal: AbortSignal) {
   const [ready, sleeping] = await Promise.all([
@@ -19,6 +23,15 @@ export async function fetchBrowseData(signal: AbortSignal) {
   ]);
 
   return { tasks, categories, timeZone: config.timeZone };
+}
+
+export async function fetchArchivedData(signal: AbortSignal) {
+  const [tasks, config] = await Promise.all([
+    fetchArchivedTasks(signal),
+    fetchAppConfig(signal),
+  ]);
+
+  return { tasks, timeZone: config.timeZone };
 }
 
 export async function fetchEditorDependencies(signal?: AbortSignal) {

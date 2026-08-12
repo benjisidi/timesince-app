@@ -276,9 +276,11 @@ describe("task API", () => {
   });
 
   it("edits, snoozes, archives, reads, and restores while preserving history", async () => {
-    const { api, setNow } = await setup();
+    const { api, categories, setNow } = await setup();
+    const category = await categories.create({ name: "Kitchen", position: 0 });
     const created = await api.post("/api/tasks").send({
       name: "Clean oven",
+      categoryId: category.id,
       targetIntervalDays: 30,
     });
     const completion = await api
@@ -286,12 +288,14 @@ describe("task API", () => {
       .send({ completedAt: "2026-07-01T08:00:00.000Z" });
     const edited = await api.patch(`/api/tasks/${created.body.id}`).send({
       name: "Deep-clean oven",
+      categoryId: category.id,
       targetIntervalDays: 45,
       snoozedUntil: "2026-08-20",
     });
     expect(edited.status).toBe(200);
     expect(edited.body).toMatchObject({
       name: "Deep-clean oven",
+      category: { id: category.id, name: "Kitchen" },
       targetIntervalDays: 45,
       snoozedUntil: "2026-08-19T23:00:00.000Z",
       lastCompletedAt: "2026-07-01T08:00:00.000Z",
@@ -339,6 +343,7 @@ describe("task API", () => {
     expect(restored.status).toBe(200);
     expect(restored.body).toMatchObject({
       name: "Deep-clean oven",
+      category: { id: category.id, name: "Kitchen" },
       targetIntervalDays: 45,
       snoozedUntil: "2026-08-19T23:00:00.000Z",
       archivedAt: null,

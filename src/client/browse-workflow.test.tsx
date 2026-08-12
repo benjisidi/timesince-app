@@ -80,10 +80,10 @@ describe("Browse view", () => {
     await screen.findByRole("heading", { name: "Browse" });
     expect(screen.getAllByRole("link", { name: "Ready" })).toHaveLength(2);
     expect(screen.getAllByRole("link", { name: "Browse" })).toHaveLength(2);
-    expect(screen.getByRole("link", { name: "Manage" })).toBeTruthy();
     expect(
-      screen.queryByRole("link", { name: "Manage categories" }),
-    ).toBeNull();
+      screen.getByRole("link", { name: "Manage categories" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Archived tasks" })).toBeTruthy();
     const categorySections = await screen.findAllByRole("region");
     expect(
       categorySections.map((section) =>

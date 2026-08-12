@@ -21,11 +21,14 @@ export function AppNavigation({
   const location = useLocation();
   const browseRoute = location.pathname === "/categories";
   const manageCategories = location.pathname === "/categories/manage";
-  const viewLabel = manageCategories
-    ? "Manage categories"
-    : browseRoute
-      ? "Browse"
-      : "Ready";
+  const archivedTasks = location.pathname === "/categories/archived";
+  const viewLabel = archivedTasks
+    ? "Archived tasks"
+    : manageCategories
+      ? "Manage categories"
+      : browseRoute
+        ? "Browse"
+        : "Ready";
   const shortcutLabel = /Mac|iPhone|iPad/.test(navigator.platform)
     ? "⌘K"
     : "Ctrl K";

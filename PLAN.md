@@ -1151,7 +1151,19 @@ Avoid a broad redesign unless manual QA exposes a structural visual problem.
 
 # Milestone 16 — Archived task management
 
-**Status:** Not started
+**Status:** Complete
+
+Completed 2026-08-12. Browse now links to a secondary archived-task
+management surface with recently archived tasks, identifying category, target,
+last-completion, and archive-date context. Archived details use the existing
+responsive sheet/panel pattern in a deliberately read-only presentation, with
+retained snooze data kept as an implementation detail until restoration. The
+existing restore endpoint now feeds central client reconciliation so restored
+tasks return to Ready, Sleeping, Browse, and loaded Search collections according
+to their current derived state. Focused API, reducer, and frontend workflow
+tests cover field/history preservation, failed restore retry, and important
+state transitions; the full validation suite passes with 80 tests and mobile
+and desktop layouts were manually reviewed.
 
 ## Goal
 

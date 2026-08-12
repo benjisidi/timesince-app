@@ -220,14 +220,17 @@ export function BrowsePage({
   }
 
   return (
-    <main className="task-page" aria-labelledby="browse-view-title">
+    <main className="task-page browse-page" aria-labelledby="browse-view-title">
       <div className="page-intro">
         <div>
           <h1 id="browse-view-title">Browse</h1>
         </div>
         <div className="page-actions">
           <NavLink className="page-action" to="/categories/manage">
-            Manage
+            Manage categories
+          </NavLink>
+          <NavLink className="page-action" to="/categories/archived">
+            Archived tasks
           </NavLink>
           <AddTaskButton
             accessibleName="New task"

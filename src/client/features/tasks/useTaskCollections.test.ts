@@ -37,6 +37,8 @@ function loadedState(tasks: TaskResponse[]): TaskCollectionsState {
     browseTasks: tasks,
     browseLoaded: true,
     searchTasks: tasks,
+    archivedTasks: [],
+    archivedLoaded: true,
   };
 }
 
@@ -99,5 +101,80 @@ describe("task collection reconciliation", () => {
     expect(removed.sleepingTasks).toEqual([]);
     expect(removed.browseTasks).toEqual([]);
     expect(removed.searchTasks).toEqual([]);
+  });
+
+  it("removes a restored task from archives and returns it to its derived active collections", () => {
+    const archived = task({
+      id: 1,
+      name: "Clean oven",
+      archivedAt: "2026-08-10T08:00:00.000Z",
+      visibleInReady: false,
+    });
+    const state: TaskCollectionsState = {
+      ...initialTaskCollectionsState,
+      browseLoaded: true,
+      searchTasks: [],
+      archivedTasks: [archived],
+      archivedLoaded: true,
+    };
+    const restored = task({
+      ...archived,
+      archivedAt: null,
+      visibleInReady: true,
+    });
+
+    const result = taskCollectionsReducer(state, {
+      type: "reconcile-task",
+      task: restored,
+    });
+
+    expect(result.archivedTasks).toEqual([]);
+    expect(result.readyTasks).toEqual([restored]);
+    expect(result.sleepingTasks).toEqual([]);
+    expect(result.browseTasks).toEqual([restored]);
+    expect(result.searchTasks).toEqual([restored]);
+  });
+
+  it("keeps restored sleeping and snoozed tasks out of the visible Ready list", () => {
+    const archived = task({
+      id: 1,
+      name: "Clean oven",
+      archivedAt: "2026-08-10T08:00:00.000Z",
+      visibleInReady: false,
+    });
+    const state: TaskCollectionsState = {
+      ...initialTaskCollectionsState,
+      browseLoaded: true,
+      archivedTasks: [archived],
+      archivedLoaded: true,
+    };
+    const sleeping = task({
+      ...archived,
+      archivedAt: null,
+      state: "sleeping",
+      visibleInReady: false,
+    });
+    const sleepingResult = taskCollectionsReducer(state, {
+      type: "reconcile-task",
+      task: sleeping,
+    });
+    expect(sleepingResult.readyTasks).toEqual([]);
+    expect(sleepingResult.sleepingTasks).toEqual([sleeping]);
+    expect(sleepingResult.browseTasks).toEqual([sleeping]);
+
+    const snoozed = task({
+      ...archived,
+      archivedAt: null,
+      isSnoozed: true,
+      snoozedUntil: "2026-08-20T23:00:00.000Z",
+      visibleInReady: false,
+    });
+    const snoozedResult = taskCollectionsReducer(state, {
+      type: "reconcile-task",
+      task: snoozed,
+    });
+    expect(snoozedResult.readyTasks).toEqual([]);
+    expect(snoozedResult.sleepingTasks).toEqual([]);
+    expect(snoozedResult.browseTasks).toEqual([snoozed]);
   });
 });

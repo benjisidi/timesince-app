@@ -11,6 +11,7 @@ import {
 } from "./api/categories";
 import { BACKEND_STATUS_EVENT, type BackendStatus } from "./api/client";
 import {
+  fetchArchivedData,
   fetchBrowseData,
   fetchEditorDependencies,
   fetchReadyData,
@@ -20,10 +21,12 @@ import { AppNavigation } from "./components/AppNavigation";
 import { AddTaskButton } from "./components/TaskList";
 import { UndoStack } from "./features/completion/UndoStack";
 import { useCompletionWorkflow } from "./features/completion/useCompletionWorkflow";
+import { ArchivedTaskDetails } from "./features/archive/ArchivedTaskDetails";
 import { TaskEditor, type EditorState } from "./features/editor/TaskEditor";
 import { TaskSearchDialog } from "./features/search/TaskSearchDialog";
 import { useTaskCollections } from "./features/tasks/useTaskCollections";
 import { BrowsePage } from "./pages/BrowsePage";
+import { ArchivedTasksPage } from "./pages/ArchivedTasksPage";
 import { ManageCategories } from "./pages/ManageCategoriesPage";
 import { ReadyPage } from "./pages/ReadyPage";
 import { PwaStatus } from "./PwaStatus";
@@ -44,6 +47,7 @@ export function App() {
   const location = useLocation();
   const isBrowseRoute = location.pathname === "/categories";
   const isManageCategories = location.pathname === "/categories/manage";
+  const isArchivedTasks = location.pathname === "/categories/archived";
   const [readyLoadState, setReadyLoadState] = useState<LoadState>("loading");
   const [readyLoadAttempt, setReadyLoadAttempt] = useState(0);
   const {
@@ -51,9 +55,11 @@ export function App() {
     sleepingTasks,
     browseTasks,
     searchTasks,
+    archivedTasks,
     loadReady,
     loadBrowse,
     loadSearch,
+    loadArchived,
     clearSearch,
     reconcileTask,
     removeTask,
@@ -69,6 +75,9 @@ export function App() {
   const [managementLoadState, setManagementLoadState] =
     useState<LoadState>("loading");
   const [managementLoadAttempt, setManagementLoadAttempt] = useState(0);
+  const [archivedLoadState, setArchivedLoadState] =
+    useState<DependencyState>("idle");
+  const [archivedLoadAttempt, setArchivedLoadAttempt] = useState(0);
   const [announcement, setAnnouncement] = useState("");
   const {
     completingTaskIds,
@@ -89,6 +98,9 @@ export function App() {
     useState<DependencyState>("idle");
   const [searchLoadAttempt, setSearchLoadAttempt] = useState(0);
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [archivedDetails, setArchivedDetails] = useState<TaskResponse | null>(
+    null,
+  );
   const [dependencyState, setDependencyState] =
     useState<DependencyState>("idle");
   const [appearsOffline, setAppearsOffline] = useState(
@@ -129,6 +141,9 @@ export function App() {
         setManagementLoadState("loading");
         setManagementLoadAttempt((attempt) => attempt + 1);
       }
+      if (isArchivedTasks && archivedLoadState === "error") {
+        setArchivedLoadAttempt((attempt) => attempt + 1);
+      }
     }
 
     window.addEventListener("offline", handleOffline);
@@ -141,8 +156,10 @@ export function App() {
     browseLoadState,
     isBrowseRoute,
     isManageCategories,
+    isArchivedTasks,
     readyLoadState,
     managementLoadState,
+    archivedLoadState,
   ]);
 
   useEffect(() => {
@@ -246,6 +263,26 @@ export function App() {
     return () => abortController.abort();
   }, [isManageCategories, managementLoadAttempt]);
 
+  useEffect(() => {
+    if (!isArchivedTasks) return;
+    const abortController = new AbortController();
+    async function loadArchivedTasks() {
+      setArchivedLoadState("loading");
+      try {
+        const data = await fetchArchivedData(abortController.signal);
+        loadArchived(data.tasks);
+        setAppTimeZone(data.timeZone);
+        setArchivedLoadState("ready");
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name === "AbortError")) {
+          setArchivedLoadState("error");
+        }
+      }
+    }
+    void loadArchivedTasks();
+    return () => abortController.abort();
+  }, [archivedLoadAttempt, isArchivedTasks, loadArchived]);
+
   async function loadDependencies() {
     setDependencyState("loading");
     try {
@@ -270,6 +307,16 @@ export function App() {
 
   function closeEditor() {
     setEditor(null);
+    window.setTimeout(() => returnFocusRef.current?.focus(), 0);
+  }
+
+  function openArchivedDetails(task: TaskResponse) {
+    returnFocusRef.current = document.activeElement as HTMLElement | null;
+    setArchivedDetails(task);
+  }
+
+  function closeArchivedDetails() {
+    setArchivedDetails(null);
     window.setTimeout(() => returnFocusRef.current?.focus(), 0);
   }
 
@@ -417,6 +464,18 @@ export function App() {
               />
             }
           />
+          <Route
+            path="/categories/archived"
+            element={
+              <ArchivedTasksPage
+                loadState={archivedLoadState}
+                tasks={archivedTasks}
+                timeZone={appTimeZone}
+                onRetry={() => setArchivedLoadAttempt((attempt) => attempt + 1)}
+                onSelect={openArchivedDetails}
+              />
+            }
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
@@ -432,7 +491,7 @@ export function App() {
         />
       ) : null}
 
-      {!isManageCategories ? (
+      {!isManageCategories && !isArchivedTasks ? (
         <AddTaskButton
           accessibleName="Add task"
           className="add-task-button"
@@ -484,6 +543,20 @@ export function App() {
             removeTask(task.id);
             setAnnouncement(`Archived ${task.name}.`);
             closeEditor();
+          }}
+        />
+      ) : null}
+
+      {archivedDetails && appTimeZone ? (
+        <ArchivedTaskDetails
+          key={`archived-${archivedDetails.id}`}
+          task={archivedDetails}
+          timeZone={appTimeZone}
+          onClose={closeArchivedDetails}
+          onRestored={(task) => {
+            reconcileTask(task);
+            setAnnouncement(`Restored ${task.name}.`);
+            closeArchivedDetails();
           }}
         />
       ) : null}
