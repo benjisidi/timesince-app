@@ -9,29 +9,17 @@ import {
   renameCategory,
   reorderCategories,
 } from "./api/categories";
-import {
-  BACKEND_STATUS_EVENT,
-  TaskApiError,
-  type BackendStatus,
-} from "./api/client";
+import { BACKEND_STATUS_EVENT, type BackendStatus } from "./api/client";
 import {
   fetchBrowseData,
   fetchEditorDependencies,
   fetchReadyData,
 } from "./api/loaders";
-import {
-  completeTask,
-  fetchAllActiveTasks,
-  fetchTask,
-  undoCompletion,
-} from "./api/tasks";
+import { fetchAllActiveTasks } from "./api/tasks";
 import { AppNavigation } from "./components/AppNavigation";
 import { AddTaskButton } from "./components/TaskList";
-import {
-  UndoStack,
-  type UndoItem,
-  type UndoStatus,
-} from "./features/completion/UndoStack";
+import { UndoStack } from "./features/completion/UndoStack";
+import { useCompletionWorkflow } from "./features/completion/useCompletionWorkflow";
 import {
   TaskEditor,
   type EditorDependencies,
@@ -47,16 +35,6 @@ import { PwaStatus } from "./PwaStatus";
 type LoadState = "loading" | "ready" | "error";
 type DependencyState = "idle" | LoadState;
 const SLEEPING_EXPANDED_KEY = "timesince.sleeping-expanded.v1";
-function optimisticallyCompleteTask(task: TaskResponse): TaskResponse {
-  return {
-    ...task,
-    lastCompletedAt: new Date().toISOString(),
-    elapsedDays: 0,
-    overageDays: 0,
-    state: "sleeping",
-    visibleInReady: false,
-  };
-}
 
 function readSleepingExpanded() {
   try {
@@ -95,12 +73,20 @@ export function App() {
   const [managementLoadState, setManagementLoadState] =
     useState<LoadState>("loading");
   const [managementLoadAttempt, setManagementLoadAttempt] = useState(0);
-  const [completingTaskIds, setCompletingTaskIds] = useState<Set<number>>(
-    new Set(),
-  );
-  const [completionError, setCompletionError] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState("");
-  const [undoItems, setUndoItems] = useState<UndoItem[]>([]);
+  const {
+    completingTaskIds,
+    completionDisabledTaskIds,
+    completionError,
+    undoItems,
+    clearCompletionError,
+    handleComplete,
+    expireUndo,
+    handleUndo,
+  } = useCompletionWorkflow({
+    reconcileTask,
+    announce: setAnnouncement,
+  });
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchLoadState, setSearchLoadState] =
@@ -117,10 +103,6 @@ export function App() {
   const [backendUnavailable, setBackendUnavailable] = useState(false);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const searchReturnFocusRef = useRef<HTMLElement | null>(null);
-  const nextUndoIdRef = useRef(1);
-
-  const completionDisabledTaskIds = new Set(completingTaskIds);
-  for (const item of undoItems) completionDisabledTaskIds.add(item.taskId);
 
   useEffect(() => {
     function handleBackendStatus(event: Event) {
@@ -170,7 +152,7 @@ export function App() {
     const abortController = new AbortController();
     async function loadTasks() {
       setReadyLoadState("loading");
-      setCompletionError(null);
+      clearCompletionError();
       try {
         const readyData = await fetchReadyData(abortController.signal);
         loadReady(readyData.ready, readyData.sleeping);
@@ -182,7 +164,7 @@ export function App() {
     }
     void loadTasks();
     return () => abortController.abort();
-  }, [loadReady, readyLoadAttempt]);
+  }, [clearCompletionError, loadReady, readyLoadAttempt]);
 
   useEffect(() => {
     function handleSearchShortcut(event: KeyboardEvent) {
@@ -199,14 +181,14 @@ export function App() {
       if (document.querySelector("dialog[open]")) return;
       searchReturnFocusRef.current =
         document.activeElement as HTMLElement | null;
-      setCompletionError(null);
+      clearCompletionError();
       setSearchLoadState((current) => (current === "error" ? "idle" : current));
       setIsSearchOpen(true);
     }
 
     window.addEventListener("keydown", handleSearchShortcut);
     return () => window.removeEventListener("keydown", handleSearchShortcut);
-  }, []);
+  }, [clearCompletionError]);
 
   useEffect(() => {
     if (!isSearchOpen || searchTasks !== null) return;
@@ -234,7 +216,7 @@ export function App() {
     const abortController = new AbortController();
     async function loadBrowseData() {
       setBrowseLoadState("loading");
-      setCompletionError(null);
+      clearCompletionError();
       try {
         const browseData = await fetchBrowseData(abortController.signal);
         loadBrowse(browseData.tasks);
@@ -253,7 +235,7 @@ export function App() {
     }
     void loadBrowseData();
     return () => abortController.abort();
-  }, [browseLoadAttempt, isBrowseRoute, loadBrowse]);
+  }, [browseLoadAttempt, clearCompletionError, isBrowseRoute, loadBrowse]);
 
   useEffect(() => {
     if (!isManageCategories) return;
@@ -302,7 +284,7 @@ export function App() {
   function openSearch(trigger: HTMLElement | null) {
     if (document.querySelector("dialog[open]")) return;
     searchReturnFocusRef.current = trigger;
-    setCompletionError(null);
+    clearCompletionError();
     setSearchLoadState((current) => (current === "error" ? "idle" : current));
     setIsSearchOpen(true);
   }
@@ -311,7 +293,7 @@ export function App() {
     const returnFocus = searchReturnFocusRef.current;
     setIsSearchOpen(false);
     setSearchQuery("");
-    setCompletionError(null);
+    clearCompletionError();
     window.setTimeout(() => returnFocus?.focus(), 0);
   }
 
@@ -319,7 +301,7 @@ export function App() {
     const returnFocus = searchReturnFocusRef.current;
     setIsSearchOpen(false);
     setSearchQuery("");
-    setCompletionError(null);
+    clearCompletionError();
     openEditor({ mode: "edit", task }, returnFocus);
   }
 
@@ -328,86 +310,6 @@ export function App() {
     setEditorDependencies((current) =>
       current ? { ...current, categories: nextCategories } : current,
     );
-  }
-
-  function focusCompletionControl(taskId: number) {
-    window.setTimeout(() => {
-      const controls = document.querySelectorAll<HTMLButtonElement>(
-        `[data-completion-task-id="${taskId}"]`,
-      );
-      controls.item(controls.length - 1)?.focus();
-    }, 0);
-  }
-
-  async function handleComplete(task: TaskResponse, shouldFocusUndo: boolean) {
-    if (completionDisabledTaskIds.has(task.id)) return;
-    setCompletionError(null);
-    setAnnouncement("");
-    setCompletingTaskIds((current) => new Set(current).add(task.id));
-    reconcileTask(optimisticallyCompleteTask(task));
-    try {
-      const result = await completeTask(task.id);
-      reconcileTask(result.task);
-      const undoItem: UndoItem = {
-        id: nextUndoIdRef.current++,
-        completionId: result.completion.id,
-        taskId: task.id,
-        taskName: task.name,
-        status: "available",
-        shouldFocus: shouldFocusUndo,
-      };
-      setUndoItems((current) => [...current, undoItem]);
-      setAnnouncement(
-        `Completed ${task.name}. Undo is available for five seconds.`,
-      );
-    } catch {
-      reconcileTask(task);
-      setCompletionError(
-        `Couldn’t complete ${task.name}. Check your connection and try again.`,
-      );
-      if (shouldFocusUndo) focusCompletionControl(task.id);
-    } finally {
-      setCompletingTaskIds((current) => {
-        const next = new Set(current);
-        next.delete(task.id);
-        return next;
-      });
-    }
-  }
-
-  function expireUndo(itemId: number) {
-    setUndoItems((current) => current.filter((item) => item.id !== itemId));
-  }
-
-  function setUndoStatus(itemId: number, status: UndoStatus) {
-    setUndoItems((current) =>
-      current.map((item) => (item.id === itemId ? { ...item, status } : item)),
-    );
-  }
-
-  async function handleUndo(item: UndoItem) {
-    setAnnouncement("");
-    setUndoStatus(item.id, "undoing");
-    try {
-      let task: TaskResponse;
-      try {
-        task = (await undoCompletion(item.completionId)).task;
-      } catch (error) {
-        if (!(error instanceof TaskApiError && error.status === 404)) {
-          throw error;
-        }
-        task = await fetchTask(item.taskId);
-      }
-      reconcileTask(task);
-      setUndoItems((current) =>
-        current.filter((candidate) => candidate.id !== item.id),
-      );
-      setAnnouncement(`Undid completion of ${item.taskName}.`);
-      focusCompletionControl(item.taskId);
-    } catch {
-      setUndoStatus(item.id, "failed");
-      setAnnouncement(`Couldn’t undo completion of ${item.taskName}.`);
-    }
   }
 
   function toggleSleeping() {
