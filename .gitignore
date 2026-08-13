@@ -30,3 +30,6 @@ data/
 
 # Codex config
 .codex
+
+# Drive client details
+.drive-client
