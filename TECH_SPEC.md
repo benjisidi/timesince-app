@@ -539,7 +539,10 @@ Rules:
 - migrations must be deterministic;
 - migration order must be committed;
 - production startup should not silently perform destructive schema operations;
-- make a backup before migrations that could rewrite significant data.
+- the normal production workflow must take and verify a pre-migration backup
+  before running the new release's migration bundle;
+- migrations that rewrite significant data additionally require explicit
+  review and a documented recovery decision.
 
 A fresh database should be constructible entirely from repository migrations.
 
@@ -547,60 +550,499 @@ A fresh database should be constructible entirely from repository migrations.
 
 ## 12. Deployment
 
-Primary target: Wyse 5070 running Linux.
+### 12.1 Architecture and deployment status
 
-Recommended production shape:
+The production target is the Wyse 5070 running Ubuntu Server 26.04 LTS. Use a
+systemd-managed Node 22 process and Tailscale Serve. Docker, Compose, a public
+reverse proxy, and application authentication are not part of this deployment.
+
+The production request path is:
 
 ```text
-Tailscale HTTPS
+Desktop/mobile browser or installed PWA
+      |
+      | HTTPS, private tailnet only
       |
       v
-Node app on localhost/internal port
+Tailscale Serve on the Wyse
+      |
+      | HTTP proxy to 127.0.0.1:3000
       |
       v
-SQLite file on local SSD
+systemd -> Node 22 / Express
+      |
+      v
+/var/lib/timesince/timesince.sqlite
 ```
 
-Either of these operational styles is acceptable:
+Express must remain bound to `127.0.0.1`; port 3000 must not be opened on the
+LAN, tailnet, router, or public internet. Tailscale Serve is the only network
+entry point. It terminates TLS and applies the tailnet access boundary.
 
-- systemd-managed Node process; or
-- a small Docker Compose deployment.
+The repository contains the complete deployment implementation:
 
-Prefer whichever keeps deployment, logs, restart behaviour, and backups simplest on the host.
+- `scripts/deploy-production.sh`: normal development-machine entry point;
+- `scripts/deploy-host.sh`: privileged atomic host update implementation;
+- `deploy/timesince.env.example`: production configuration template;
+- `deploy/systemd/timesince.service`: application supervision;
+- `deploy/systemd/timesince-backup.service`: daily backup and off-host sync;
+- `deploy/systemd/timesince-backup.timer`: persistent daily schedule;
+- the production build generates `dist/server/migrate.js`,
+  `dist/server/backup.js`, `dist/server/sync-backups.js`, and
+  `dist/server/restore.js` for explicit migrations, SQLite-consistent backups,
+  off-host sync, and guarded restore;
+- `docs/deployment.md`: expanded operator runbook and validation checklist.
 
-If Docker is used:
+Repository implementation is not the same as completed deployment. Milestone
+18 remains incomplete until the real host, off-host destination, Tailscale
+origin, restore proof, restart/reboot behaviour, repeated update, exposure
+boundary, and PWA behaviour have all been validated.
 
-- keep the SQLite database on a persistent bind mount/volume;
-- do not store it inside an ephemeral container filesystem.
+### 12.2 Required deployment inputs
 
-### Tailscale
+Before touching the host, obtain or confirm all of the following rather than
+inventing values:
 
-Expose the app only to the tailnet.
+- SSH destination for a host account that may run the deployment helper with
+  `sudo`, for example `deployer@timesince-host`;
+- stable Tailscale machine name and intended tailnet access policy;
+- production timezone, currently `Europe/London`;
+- configured rclone Google Drive remote name and relative backup path, for
+  example `gdrive` and `TimeSince/backups`;
+- Node and npm host paths if they are not discoverable through the root/systemd
+  `PATH`.
 
-Use HTTPS for the installed PWA.
+Deployments are made from the exact committed `HEAD`. The worktree must be
+clean, and all reviewed Milestone 18 implementation must therefore be committed
+before the first deployment. Do not deploy uncommitted files or build output.
 
-Do not enable public Tailscale Funnel or public reverse-proxy access as part of v1.
+### 12.3 Host prerequisites
 
-Application authentication becomes mandatory before public exposure.
+The host needs:
+
+- Node.js 22.13 or newer within the Node 22 line, with its matching npm;
+- `curl`, `rclone`, `tar`, OpenSSH, and systemd;
+- Tailscale and its `tailscaled` system service.
+
+The repository deliberately does not hardcode a Node installer. Use a
+maintained package source or verified official binary suitable for the host,
+then verify `node --version` and `npm --version`. The deployment scripts reject
+Node versions outside the supported Node 22 range. If Node is outside the
+default service path, set `PATH` in the production environment file and pass
+`TIMESINCE_NODE_BINARY` and `TIMESINCE_NPM_BINARY` when deploying.
+
+### 12.4 Production filesystem and ownership
+
+Use this fixed separation:
+
+```text
+/opt/timesince/
+  releases/<full-git-sha>/       immutable, root-owned release
+  current -> releases/<sha>      atomically replaced active symlink
+
+/var/lib/timesince/
+  timesince.sqlite               persistent production database
+  rclone/rclone.conf             service-owned Google Drive configuration
+  deployment-in-progress         present only during unsafe/incomplete cutover
+
+/etc/timesince/
+  timesince.env                  root:timesince, mode 0640
+
+/var/backups/timesince/
+  daily/
+  pre-migration/
+  manual/
+```
+
+SQLite may create `timesince.sqlite-wal` and `timesince.sqlite-shm` beside the
+database. They are persistent-data companions, never release artifacts.
+
+Prepare an empty host idempotently:
+
+```sh
+if ! id timesince >/dev/null 2>&1; then
+  sudo useradd --system --home-dir /var/lib/timesince --shell /usr/sbin/nologin timesince
+fi
+sudo install -d -o root -g root -m 0755 /opt/timesince /opt/timesince/releases
+sudo install -d -o timesince -g timesince -m 0750 /var/lib/timesince
+sudo install -d -o timesince -g timesince -m 0750 /var/backups/timesince
+sudo install -d -o root -g timesince -m 0750 /etc/timesince
+```
+
+Never put the production database, configuration, or backups in a release or
+Git working tree. Removing an old release must never remove
+`/var/lib/timesince` or `/var/backups/timesince`.
+
+### 12.5 Production configuration and safety guards
+
+Install `deploy/timesince.env.example` as
+`/etc/timesince/timesince.env`, owned by `root:timesince` with mode `0640`.
+The required baseline is:
+
+```text
+NODE_ENV=production
+TIME_ZONE=Europe/London
+DATABASE_PATH=/var/lib/timesince/timesince.sqlite
+PORT=3000
+BACKUP_DIRECTORY=/var/backups/timesince
+BACKUP_RETENTION_COUNT=30
+RCLONE_REMOTE=gdrive
+RCLONE_BACKUP_PATH=TimeSince/backups
+RCLONE_CONFIG=/var/lib/timesince/rclone/rclone.conf
+```
+
+`RCLONE_CONFIG` is optional when rclone can find the service user's configured
+remote, but an explicit service-owned path under `/var/lib/timesince` is
+preferred for systemd and permits rclone to persist refreshed Google Drive
+credentials. Optionally set an absolute `RCLONE_BINARY` and a service `PATH`
+when host tools are not in their usual locations. Never commit the rclone
+configuration or Google Drive credentials.
+
+Production startup, migrations, backups, and restores all require
+`NODE_ENV=production` and an explicit absolute `DATABASE_PATH` outside the
+current release. Backup paths must also be absolute, outside the release, and
+separate from the live database directory. Development migration and fixture
+commands retain their existing checkout-local guards. Never bypass these
+checks to make a command convenient.
+
+### 12.6 systemd installation and supervision
+
+Transfer the environment template and units from the reviewed checkout:
+
+```sh
+scp deploy/timesince.env.example deploy/systemd/timesince* deployer@timesince-host:/tmp/
+```
+
+On the host:
+
+```sh
+if ! sudo test -e /etc/timesince/timesince.env; then
+  sudo install -o root -g timesince -m 0640 /tmp/timesince.env.example /etc/timesince/timesince.env
+fi
+sudoedit /etc/timesince/timesince.env
+sudo install -o root -g root -m 0644 /tmp/timesince.service /etc/systemd/system/timesince.service
+sudo install -o root -g root -m 0644 /tmp/timesince-backup.service /etc/systemd/system/timesince-backup.service
+sudo install -o root -g root -m 0644 /tmp/timesince-backup.timer /etc/systemd/system/timesince-backup.timer
+sudo systemctl daemon-reload
+sudo systemctl enable timesince.service
+```
+
+Do not start the application before the first release migration succeeds.
+
+The application unit runs as the non-login `timesince` user from
+`/opt/timesince/current`, restarts only on failure after five seconds, logs to
+journald, allows writes only to `/var/lib/timesince`, and gives graceful
+shutdown up to 20 seconds. The Node process handles `SIGINT` and `SIGTERM`,
+stops accepting requests, and closes SQLite. The unit refuses to start while
+`/var/lib/timesince/deployment-in-progress` exists.
+
+Standard operations are:
+
+```sh
+sudo systemctl status timesince.service
+sudo journalctl -u timesince.service --since today
+sudo systemctl restart timesince.service
+sudo systemctl stop timesince.service
+sudo systemctl start timesince.service
+curl --fail http://127.0.0.1:3000/api/health
+```
+
+The health endpoint returns `{"status":"ok"}` only when Express can read all
+three core migrated tables. A listening process with a missing/incompatible
+schema returns HTTP 503 and is not a successful deployment.
+
+### 12.7 Tailscale private HTTPS
+
+Install Tailscale using its current official Ubuntu instructions, enable
+`tailscaled`, join the approved tailnet, choose the stable node name, and enable
+MagicDNS plus HTTPS certificates in the Tailscale admin console. Then configure
+the private reverse proxy:
+
+```sh
+sudo tailscale serve --bg http://127.0.0.1:3000
+tailscale serve status
+```
+
+`--bg` persists the Serve configuration across Tailscale and host restarts.
+Do not enable Tailscale Funnel. Do not add a public DNS record or another public
+proxy. Tailnet ACLs/grants must allow only the intended user/devices if the
+tailnet contains other principals. Enabling Tailscale HTTPS publishes the
+machine and tailnet DNS names in public certificate-transparency records; it
+does not make the service publicly reachable, but the operator must accept that
+metadata disclosure.
+
+Verify the access boundary:
+
+```sh
+ss -ltnp
+tailscale serve status
+tailscale funnel status
+curl --fail http://127.0.0.1:3000/api/health
+```
+
+Node must be listening only on `127.0.0.1:3000`. Confirm the generated
+`https://<machine>.<tailnet>.ts.net/` origin works from intended tailnet desktop
+and mobile devices, and that the service cannot be reached from a device that
+is not connected to the tailnet.
+
+### 12.8 Normal deployment and update command
+
+The development-to-production path is intentionally one command. From a clean,
+committed checkout using Node 22:
+
+```sh
+nvm use
+export TIMESINCE_DEPLOY_HOST=deployer@timesince-host
+./scripts/deploy-production.sh
+```
+
+Optional overrides are:
+
+```text
+TIMESINCE_DEPLOY_ROOT=/opt/timesince
+TIMESINCE_ENV_FILE=/etc/timesince/timesince.env
+TIMESINCE_SERVICE_NAME=timesince
+TIMESINCE_NODE_BINARY=/absolute/host/path/to/node
+TIMESINCE_NPM_BINARY=/absolute/host/path/to/npm
+```
+
+The development-side script:
+
+1. rejects a dirty worktree or unsupported local Node version;
+2. selects the full Git SHA for committed `HEAD`;
+3. runs `npm run check`;
+4. creates a `git archive` containing that exact commit;
+5. transfers the archive and host helper over SSH;
+6. invokes the host helper through `sudo`.
+
+The host helper:
+
+1. rejects invalid paths, versions, missing units/configuration, and any
+   existing deployment marker;
+2. extracts into `/opt/timesince/releases/.staging-<sha>-<pid>`;
+3. runs `npm ci`, `npm run build`, and `npm prune --omit=dev` on the host;
+4. records `.timesince-release`, makes the release root-owned, and renames the
+   staging directory to `/opt/timesince/releases/<sha>`;
+5. for every existing database/release, creates and verifies a pre-migration
+   backup and completes the off-host sync before stopping the app;
+6. stops `timesince.service` and creates the deployment marker;
+7. runs the new release's `dist/server/migrate.js --production` against the
+   configured production database;
+8. only after migration succeeds, atomically replaces `current` using a
+   temporary symlink and GNU `mv -T`;
+9. removes the marker, starts the service, and polls the database-aware local
+   health endpoint for up to 20 seconds;
+10. retains the previous release for recovery.
+
+This preserves the central invariant: the active application release and
+database schema must be compatible. Deployment never automatically runs a down
+migration or restarts an old release against a potentially newer schema.
+
+### 12.9 Migration and deployment failure handling
+
+Application startup never runs migrations. Development uses
+`npm run db:migrate`; production deployment runs the compiled migration bundle
+with `--production` and the production environment file. Re-running the
+production migration on a current schema is a safe no-op.
+
+For deliberate host diagnosis or a documented manual migration window, stop
+the service first and run the exact active-release command:
+
+```sh
+sudo systemctl stop timesince.service
+cd /opt/timesince/current
+sudo -u timesince NODE_ENV=production /usr/bin/env node \
+  --env-file=/etc/timesince/timesince.env \
+  dist/server/migrate.js --production
+```
+
+Do not use this manual form as a shortcut around the normal pre-migration
+backup and release cutover. If it is used during recovery, retain the
+deployment marker until compatibility and health have been verified.
+
+If the pre-migration backup or off-host sync fails, deployment aborts before
+the service is stopped.
+
+If migration fails:
+
+- the service remains stopped;
+- `current` remains on the prior release;
+- the deployment marker remains present and blocks boot-time startup;
+- do not start the prior release until the database is known to match it;
+- inspect output/logs and restore the verified pre-migration backup if the
+  migration may have changed the database.
+
+If the symlink switch succeeds but startup or health verification fails:
+
+- the new release remains selected;
+- the service is stopped and the deployment marker is restored;
+- inspect `journalctl -u timesince.service`;
+- fix forward when safe, or restore the pre-migration backup and atomically
+  point `current` back to the matching prior release.
+
+After manual recovery, remove the marker only when the chosen release and
+database schema are confirmed compatible:
+
+```sh
+sudo ln -s /opt/timesince/releases/PREVIOUS_FULL_GIT_SHA /opt/timesince/.current-recovery
+sudo mv -Tf /opt/timesince/.current-recovery /opt/timesince/current
+sudo rm -f /var/lib/timesince/deployment-in-progress
+sudo systemctl start timesince.service
+curl --fail http://127.0.0.1:3000/api/health
+```
+
+### 12.10 Deployment acceptance
+
+Do not mark Milestone 18 complete after merely installing the files. On the real
+host, record evidence that:
+
+- a first deployment creates a migrated database and healthy service;
+- deliberately killing Node causes systemd to restart it;
+- rebooting the host restores systemd, Tailscale, Tailscale Serve, and the
+  backup timer;
+- a second committed deployment preserves recognisable production data;
+- production migration can be invoked deliberately and safely rerun as a no-op;
+- desktop and mobile devices can use the private HTTPS origin;
+- the Node port is loopback-only and the HTTPS service is not publicly
+  reachable;
+- the backup and restore acceptance in section 13 succeeds;
+- production-origin PWA validation succeeds as described in section 9 and the
+  checklist below.
+
+PWA validation on the real HTTPS origin must cover manifest/icons,
+installability, standalone launch, service-worker active/waiting lifecycle,
+application-shell caching, the update prompt with a genuinely changed client
+build, and recovery after backend reconnection. Inspect Cache Storage and
+confirm `/api` responses are absent. Stop the backend and verify the cached
+shell reports backend unavailability, failed writes roll back, and no mutation
+is queued or replayed later.
 
 ---
 
 ## 13. Backups
 
-The SQLite database is small, so backups should be simple and frequent.
+### 13.1 Backup policy and implementation
 
-Minimum production policy:
+Use `better-sqlite3`'s online backup API. Never copy the live SQLite file with
+`cp`, rclone, or another naive file copier while WAL mode may be active. Rclone
+operates only on already published, verified backup files.
 
-- automated daily SQLite-consistent backup;
-- retain multiple recent versions;
-- maintain at least one off-host copy;
-- document restoration.
+Each local backup:
 
-Do not back up by blindly copying a live SQLite database file in a way that can produce an inconsistent snapshot.
+- uses the explicit production database and refuses a missing source rather
+  than creating an empty database;
+- is created as a temporary file through SQLite's online backup API;
+- passes `PRAGMA integrity_check` before publication;
+- is atomically renamed to a timestamped `.sqlite` filename;
+- receives a SHA-256 sidecar and mode `0600`;
+- belongs to `daily`, `pre-migration`, or `manual`;
+- applies `BACKUP_RETENTION_COUNT` separately within each label directory.
 
-Use SQLite's backup mechanism or another SQLite-aware backup process.
+The default retention is 30 backups per label. The off-host transport uses
+`rclone copy`, never `rclone sync`, so deletion caused by local retention is not
+propagated to Google Drive. A remote copy failure does not remove the valid
+local backup, but it makes the systemd backup job or deployment fail visibly.
 
-Before risky migrations, take an additional backup.
+Configure the Google Drive remote with rclone, then make the resulting
+configuration readable by the `timesince` service account without placing it
+in Git:
+
+```sh
+sudo install -d -o timesince -g timesince -m 0700 /var/lib/timesince/rclone
+sudo install -o timesince -g timesince -m 0600 /path/to/configured/rclone.conf /var/lib/timesince/rclone/rclone.conf
+sudo -u timesince rclone --config /var/lib/timesince/rclone/rclone.conf listremotes
+sudo -u timesince rclone --config /var/lib/timesince/rclone/rclone.conf lsd gdrive:
+```
+
+Replace `gdrive` with `RCLONE_REMOTE`. `RCLONE_BACKUP_PATH` must be a non-empty
+relative remote path without `.` or `..` segments. The runtime builds exactly
+`<remote>:<path>` and passes it as one process argument. Test access as the
+service user before enabling the timer.
+
+### 13.2 Automated daily backup
+
+The `timesince-backup.timer` runs daily at 03:15 with up to 30 minutes of
+random delay and `Persistent=true`, so a missed run executes after the host
+returns. Its oneshot service runs the local online backup and then the off-host
+sync. Enable it only after the destination has been configured and tested:
+
+```sh
+sudo systemctl enable --now timesince-backup.timer
+sudo systemctl start timesince-backup.service
+sudo systemctl status timesince-backup.service
+sudo journalctl -u timesince-backup.service --since today
+systemctl list-timers timesince-backup.timer
+sudo find /var/backups/timesince -maxdepth 2 -type f -print
+```
+
+A manual verified backup and sync can be run with:
+
+```sh
+cd /opt/timesince/current
+sudo -u timesince NODE_ENV=production /usr/bin/env node \
+  --env-file=/etc/timesince/timesince.env \
+  dist/server/backup.js --label manual
+sudo -u timesince NODE_ENV=production /usr/bin/env node \
+  --env-file=/etc/timesince/timesince.env \
+  dist/server/sync-backups.js
+sudo -u timesince rclone \
+  --config /var/lib/timesince/rclone/rclone.conf \
+  lsf gdrive:TimeSince/backups --recursive
+```
+
+The final command must show both the timestamped `.sqlite` file and its
+`.sha256` sidecar on Google Drive. Substitute the configured remote and path.
+
+The normal deployment automatically creates a `pre-migration` backup and
+successfully syncs it off-host before stopping any existing installation.
+
+### 13.3 Guarded restore procedure
+
+Restore is intentionally manual because it replaces production state. Retrieve
+the selected backup from local or off-host storage and ensure the `timesince`
+user can read it. Then:
+
+```sh
+sudo systemctl stop timesince.service
+cd /opt/timesince/current
+sudo -u timesince NODE_ENV=production /usr/bin/env node \
+  --env-file=/etc/timesince/timesince.env \
+  dist/server/restore.js \
+  --backup /absolute/path/to/timesince-daily-TIMESTAMP.sqlite \
+  --confirm-database /var/lib/timesince/timesince.sqlite \
+  --confirm-service-stopped
+sudo systemctl start timesince.service
+curl --fail http://127.0.0.1:3000/api/health
+```
+
+The restore refuses relative paths, a source equal to the production database,
+a confirmation path that does not exactly match `DATABASE_PATH`, or omission of
+`--confirm-service-stopped`. It verifies a checksum when present, verifies
+SQLite integrity, stages the replacement on the production filesystem, moves
+the prior database and WAL/SHM companions to timestamped `.pre-restore-*`
+recovery files, and atomically installs the restored database. Retain recovery
+files until the restored application has been inspected.
+
+When restoring after a migration failure, also atomically select the release
+whose schema matches the backup before removing the deployment marker and
+starting the service. Never attempt an automatic down-migration.
+
+### 13.4 Required restore proof
+
+Before storing significant real-world data, prove the complete path:
+
+1. create a recognisable temporary task through the production HTTPS origin;
+2. create a manual backup and confirm its off-host copy exists;
+3. modify or archive that task;
+4. stop TimeSince and restore the selected backup using the guarded command;
+5. restart and confirm health plus the earlier task state through the PWA;
+6. perform the normal committed-release deployment again and confirm the
+   restored data survives;
+7. document the tested backup filename, off-host source, restore time, and
+   result.
+
+A scheduled backup file that has never been restored does not satisfy the
+production backup requirement.
 
 ---
 

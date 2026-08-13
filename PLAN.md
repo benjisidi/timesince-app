@@ -1260,6 +1260,16 @@ Do not:
 
 # Milestone 18 — Alpha deployment
 
+**Status:** In progress
+
+Repository deployment tooling implemented 2026-08-12. The systemd service,
+atomic committed-release deployment, explicit guarded migrations,
+SQLite-consistent daily/pre-migration backups, off-host rclone copy, guarded restore,
+database-aware health check, graceful shutdown, and production operations/PWA
+runbook are in place. Real Wyse/Tailscale deployment, reboot/failure testing,
+off-host backup execution, restore proof, repeated update, exposure checks, and
+production-origin PWA QA remain required before this milestone is complete.
+
 ## Goal
 
 Deploy TimeSince as a private personal application so it can be used with real tasks and real workflows.
@@ -1279,7 +1289,8 @@ Deploy to the Wyse 5070:
 - environment configuration;
 - update procedure.
 
-Choose systemd or Docker Compose based on whichever produces the simplest reliable setup.
+Use the approved systemd-managed Node 22 deployment. Docker Compose is not part
+of this milestone.
 
 ### Tailscale access
 

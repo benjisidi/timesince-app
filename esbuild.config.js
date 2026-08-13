@@ -12,8 +12,11 @@ await rm(outputDirectory, { force: true, recursive: true });
 await build({
   bundle: true,
   entryPoints: {
+    backup: "scripts/backup-production.ts",
     index: "src/server/index.ts",
     migrate: "scripts/migrate.ts",
+    restore: "scripts/restore-production.ts",
+    "sync-backups": "scripts/sync-production-backups.ts",
   },
   format: "esm",
   outdir: outputDirectory,

@@ -1,8 +1,8 @@
 # TimeSince
 
 TimeSince is a personal recurring-task tracker for routines without meaningful
-deadlines. The repository currently contains the full-stack project foundation;
-product features are added through the milestones in `PLAN.md`.
+deadlines. Product and deployment work is tracked through the milestones in
+`PLAN.md`.
 
 ## Requirements
 
@@ -44,9 +44,10 @@ The development and start commands load `.env` when it exists using Node's
 built-in env-file support. Existing shell environment variables take
 precedence. No third-party environment loader is used.
 
-`TIME_ZONE` is required. Optional `DATABASE_PATH` defaults to
-`data/timesince.sqlite`; optional `PORT` defaults to `3001` in development and
-`3000` in production.
+`TIME_ZONE` is required. In development, optional `DATABASE_PATH` defaults to
+`data/timesince.sqlite`. Production requires an explicit absolute
+`DATABASE_PATH` outside the application release directory. Optional `PORT`
+defaults to `3001` in development and `3000` in production.
 
 ## Database migrations
 
@@ -105,6 +106,15 @@ npm run build
 
 ## Production build
 
+Production deployment uses a systemd-managed Node 22 process, atomic releases,
+an external SQLite database, daily/off-host backups, and private HTTPS through
+Tailscale Serve. See [`docs/deployment.md`](docs/deployment.md) for fresh-host
+setup, routine one-command updates, migrations, logs, backup, restore, and PWA
+validation.
+
+For a local production-mode build, configure an absolute scratch database path
+outside this checkout before running:
+
 ```sh
 npm run build
 npm run db:migrate:prod
@@ -112,8 +122,8 @@ npm start
 ```
 
 The production Express process serves both the JSON API and the built frontend
-from the same origin. It listens on `127.0.0.1:3000` by default; set `PORT` to
-override the port.
+from the same origin. It listens only on `127.0.0.1:3000` by default; set
+`PORT` to override the port. Startup never applies migrations automatically.
 
 Tests and production builds do not load `.env`. They pass configuration
 explicitly or compile without starting the application, so a developer's local

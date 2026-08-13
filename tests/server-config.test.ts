@@ -28,13 +28,13 @@ describe("server configuration", () => {
   it("uses production defaults and accepts optional overrides", () => {
     expect(
       readServerConfig({
-        DATABASE_PATH: "data/custom.sqlite",
+        DATABASE_PATH: "/var/lib/timesince/custom.sqlite",
         NODE_ENV: "production",
         PORT: "4100",
         TIME_ZONE: "America/New_York",
       }),
     ).toEqual({
-      databasePath: "data/custom.sqlite",
+      databasePath: "/var/lib/timesince/custom.sqlite",
       isProduction: true,
       port: 4100,
       timeZone: "America/New_York",
@@ -43,5 +43,28 @@ describe("server configuration", () => {
     expect(() =>
       readServerConfig({ PORT: "invalid", TIME_ZONE: "Europe/London" }),
     ).toThrow("PORT must be a whole number between 1 and 65535");
+  });
+
+  it("requires an explicit absolute external production database path", () => {
+    expect(() =>
+      readServerConfig({
+        NODE_ENV: "production",
+        TIME_ZONE: "Europe/London",
+      }),
+    ).toThrow("DATABASE_PATH must be set explicitly for production");
+    expect(() =>
+      readServerConfig({
+        DATABASE_PATH: "data/timesince.sqlite",
+        NODE_ENV: "production",
+        TIME_ZONE: "Europe/London",
+      }),
+    ).toThrow("DATABASE_PATH must be an absolute path in production");
+    expect(() =>
+      readServerConfig({
+        DATABASE_PATH: resolve("data/timesince.sqlite"),
+        NODE_ENV: "production",
+        TIME_ZONE: "Europe/London",
+      }),
+    ).toThrow("DATABASE_PATH must be outside the application release");
   });
 });

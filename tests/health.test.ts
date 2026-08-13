@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createApp } from "../src/server/app";
 import { openDatabase } from "../src/server/db/database";
+import { createMigrator } from "../src/server/db/migrator";
 
 const databases = new Set<ReturnType<typeof openDatabase>>();
 const temporaryDirectories = new Set<string>();
@@ -26,6 +27,8 @@ describe("GET /api/health", () => {
   it("reports that the backend is available", async () => {
     const database = openDatabase({ path: ":memory:" });
     databases.add(database);
+    const migration = await createMigrator(database).migrateToLatest();
+    expect(migration.error).toBeUndefined();
     const response = await request(
       createApp({ database, timeZone: "Europe/London" }),
     ).get("/api/health");
@@ -33,6 +36,17 @@ describe("GET /api/health", () => {
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: "ok" });
     expect(response.headers["cache-control"]).toBe("no-store");
+  });
+
+  it("reports unavailable when the database schema is not ready", async () => {
+    const database = openDatabase({ path: ":memory:" });
+    databases.add(database);
+    const response = await request(
+      createApp({ database, timeZone: "Europe/London" }),
+    ).get("/api/health");
+
+    expect(response.status).toBe(503);
+    expect(response.body).toEqual({ status: "unavailable" });
   });
 
   it("rejects an invalid deployment timezone when creating the app", () => {

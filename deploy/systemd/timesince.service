@@ -1,0 +1,31 @@
+[Unit]
+Description=TimeSince personal recurring-task tracker
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=!/var/lib/timesince/deployment-in-progress
+
+[Service]
+Type=simple
+User=timesince
+Group=timesince
+WorkingDirectory=/opt/timesince/current
+EnvironmentFile=/etc/timesince/timesince.env
+ExecStart=/usr/bin/env node dist/server/index.js
+Restart=on-failure
+RestartSec=5s
+TimeoutStopSec=20s
+UMask=0027
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/timesince
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

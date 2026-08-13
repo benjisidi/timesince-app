@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 
 import express from "express";
-import type { Kysely } from "kysely";
+import { sql, type Kysely } from "kysely";
 
 import type { AppConfigResponse } from "../shared/api";
 import type { HealthResponse } from "../shared/health";
@@ -37,9 +37,20 @@ export function createApp(options: CreateAppOptions) {
     next();
   });
 
-  app.get("/api/health", (_request, response) => {
-    const health: HealthResponse = { status: "ok" };
-    response.json(health);
+  app.get("/api/health", async (_request, response) => {
+    try {
+      await Promise.all([
+        sql`select 1 from categories limit 1`.execute(options.database),
+        sql`select 1 from tasks limit 1`.execute(options.database),
+        sql`select 1 from completions limit 1`.execute(options.database),
+      ]);
+      const health: HealthResponse = { status: "ok" };
+      response.json(health);
+    } catch (error) {
+      console.error("Health check failed", error);
+      const health: HealthResponse = { status: "unavailable" };
+      response.status(503).json(health);
+    }
   });
 
   app.get("/api/config", (_request, response) => {

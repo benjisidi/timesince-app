@@ -1,4 +1,8 @@
 import { defaultDatabasePath } from "./db/database";
+import {
+  ProductionDatabaseSafetyError,
+  resolveProductionDatabasePath,
+} from "./db/production-config";
 
 export class ConfigurationError extends Error {
   constructor(message: string) {
@@ -51,12 +55,25 @@ function parseTimeZone(value: string | undefined): string {
 export function readServerConfig(
   environment: NodeJS.ProcessEnv = process.env,
 ): ServerConfig {
-  const isProduction = environment.NODE_ENV === "production";
+  const isProduction =
+    environment.NODE_ENV?.trim().toLowerCase() === "production";
   const defaultPort = isProduction ? 3000 : 3001;
   const configuredDatabasePath = environment.DATABASE_PATH?.trim();
 
+  let databasePath: string;
+  try {
+    databasePath = isProduction
+      ? resolveProductionDatabasePath(environment)
+      : configuredDatabasePath || defaultDatabasePath();
+  } catch (error) {
+    if (error instanceof ProductionDatabaseSafetyError) {
+      throw new ConfigurationError(error.message);
+    }
+    throw error;
+  }
+
   return {
-    databasePath: configuredDatabasePath || defaultDatabasePath(),
+    databasePath,
     isProduction,
     port: parsePort(environment.PORT, defaultPort),
     timeZone: parseTimeZone(environment.TIME_ZONE),
